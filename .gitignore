@@ -1,0 +1,8 @@
+/target
+/java/build
+/vendor
+/jnlp
+/signing
+/tools
+/java/resources/models
+/algebra-demo/src/test/resources/models

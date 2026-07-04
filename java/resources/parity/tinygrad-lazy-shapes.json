@@ -1,0 +1,51 @@
+{
+  "format": "tensor4j-lazy-shape-v1",
+  "framework": "tinygrad",
+  "notes": "Shape metadata from lazy UOp chains (before realize). Regenerate via tools/export_parity_fixtures.py",
+  "cases": [
+    {
+      "name": "reshape_chain",
+      "leaf": [2, 3],
+      "ops": [
+        {"op": "reshape", "shape": [6]},
+        {"op": "reshape", "shape": [2, 3]}
+      ],
+      "expected_shape": [2, 3]
+    },
+    {
+      "name": "permute_2d",
+      "leaf": [2, 3],
+      "ops": [{"op": "permute", "order": [1, 0]}],
+      "expected_shape": [3, 2]
+    },
+    {
+      "name": "expand_broadcast_row",
+      "leaf": [1, 3],
+      "ops": [{"op": "expand", "shape": [4, 3]}],
+      "expected_shape": [4, 3]
+    },
+    {
+      "name": "reshape_permute_expand",
+      "leaf": [2, 2, 2],
+      "ops": [
+        {"op": "reshape", "shape": [8]},
+        {"op": "reshape", "shape": [2, 2, 2]},
+        {"op": "permute", "order": [2, 0, 1]},
+        {"op": "expand", "shape": [2, 2, 2]}
+      ],
+      "expected_shape": [2, 2, 2]
+    },
+    {
+      "name": "reduce_axis0",
+      "leaf": [2, 3],
+      "ops": [{"op": "reduce", "axis": 0}],
+      "expected_shape": [3]
+    },
+    {
+      "name": "broadcast_add_shapes",
+      "leaf": [3, 1],
+      "ops": [{"op": "broadcast_with", "other": [1, 4]}],
+      "expected_shape": [3, 4]
+    }
+  ]
+}

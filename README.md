@@ -53,7 +53,7 @@ tensor4j/
     models/chat/    ChatModel forward (embed → blocks → lm_head)
     nn/            Module, Linear, Sequential
     manifold/      EuclideanManifold, ManifoldPoint
-    io/            ModelLoader (.t4j.json, .safetensors — tinygrad state-dict keys)
+    io/            ModelLoader, ModelState (get_state_dict / safe_save)
     models/algebra/   canonical regression test (ax + b = c MLP)
     cli/           CliRunner
     ui/            Swing desktop
@@ -90,6 +90,16 @@ git clone --depth 1 https://github.com/ggml-org/llama.cpp.git vendor/llama.cpp
 cd tensor4j
 python tools/export_algebra_model.py java/resources/models/algebra-v1.safetensors
 python tools/export_algebra_model.py java/resources/models/algebra-v1.t4j.json --format t4j_json
+```
+
+Java weight export (tinygrad `get_state_dict` / `safe_save`):
+
+```bash
+# general (default): arbitrary MLP init weights
+java -cp ... com.github.tensor4j.tools.GenerateWeights --out model.safetensors --layers 4,8,4,1
+
+# algebra bundle (trained regression head)
+java -cp ... com.github.tensor4j.tools.GenerateWeights --profile algebra --out java/resources/models/algebra-v1.safetensors
 cd ..
 npm run build:jnlp:tensor4j
 ```

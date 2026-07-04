@@ -9,26 +9,24 @@
  */
 package com.github.tensor4j.tools;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import com.github.tensor4j.io.ModelLoader;
-import com.github.tensor4j.io.WeightFormat;
-import com.github.tensor4j.models.algebra.AlgebraModel;
-import com.github.tensor4j.models.algebra.AlgebraTrainer;
-
-/** Dev utility: train algebra head and emit tinygrad-compatible weights. */
+/**
+ * Export tinygrad-compatible checkpoints ({@code nn.state.safe_save} / {@code get_state_dict}).
+ *
+ * <p>Default profile is {@code general}: build an MLP from {@code --layers} and export initialized
+ * weights. Use {@code --profile algebra} for the bundled regression head.
+ */
 public final class GenerateWeights {
 
     private GenerateWeights() {
     }
 
     public static void main(String[] args) throws Exception {
-        Path out = Path.of(args.length > 0 ? args[0] : "java/resources/models/algebra-v1.safetensors");
-        WeightFormat format = WeightFormat.fromPath(out);
-        AlgebraModel model = new AlgebraModel();
-        new AlgebraTrainer(model).train(400, 0.05f, 32);
-        Files.createDirectories(out.getParent());
-        ModelLoader.save(out, ModelLoader.exportTensors(model.network()), format);
-        System.out.println("wrote " + format + " weights to " + out.toAbsolutePath());
+        GenerateWeightsOptions options = GenerateWeightsOptions.parse(args);
+        if (options.help()) {
+            GenerateWeightsOptions.printHelp();
+            return;
+        }
+        GenerateWeightsRunner.GenerateWeightsResult result = new GenerateWeightsRunner().run(options);
+        System.out.println("wrote " + result.summary());
     }
 }

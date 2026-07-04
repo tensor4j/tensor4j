@@ -9,6 +9,7 @@ JUnit 5 validates **behavior aligned with tinygrad**, using a mix of hand-specif
 | **1 — Ops** | Forward math matches expected values | `TensorOpsTest`, `MovementOpsTest` |
 | **1c — Float layout** | Flat buffer + strides (not `float[][]`) | `FloatLayoutTest` |
 | **1d — Tinygrad parity** | Optional numeric cross-check vs exported fixtures | `TinygradParityTest` |
+| **1q — Ggml infer parity** | Chat forward kernels vs tinygrad/ggml-ref fixtures | `TinygradGgmlOpsParityTest`, `GgmlOpsTest`, `RopeTest` |
 | **1f — Lazy shape** | Shape metadata before realize (tinygrad `UOp._shape`) | `LazyShapeTest` |
 | **1g — Lazy shape parity** | Fixture-driven lazy shape chains | `TinygradLazyShapeParityTest` |
 | **1h — Lazy tensor** | Deferred movement ops until `realize()` | `LazyTensorTest` |
@@ -98,6 +99,8 @@ pip install numpy
 # Windows PowerShell:
 $env:PYTHONPATH = "vendor/tinygrad"
 python tools/export_parity_fixtures.py
+# Also writes java/resources/parity/tinygrad-ggml-ops.json (infer kernels)
+python tools/export_ggml_ops_parity.py   # ggml-only refresh
 # Writes java/resources/parity/tinygrad-ops.json
 mvn test
 ```
@@ -208,9 +211,11 @@ Bundled algebra weights ship as `algebra-v1.safetensors` (default). Legacy **t4j
 ```
 java/resources/parity/
   tinygrad-ops.json               # regenerate via tools/export_parity_fixtures.py
+  tinygrad-ggml-ops.json          # ggml infer kernels (mul_mat, rms_norm, rope, …)
 
 tools/
   export_parity_fixtures.py
+  export_ggml_ops_parity.py
   export_algebra_model.py         # --format safetensors for tinygrad safe_save
 ```
 

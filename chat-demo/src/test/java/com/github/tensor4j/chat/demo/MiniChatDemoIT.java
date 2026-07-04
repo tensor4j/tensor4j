@@ -12,11 +12,13 @@ package com.github.tensor4j.chat.demo;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.util.List;
 import com.github.tensor4j.models.chat.BpePreType;
 import com.github.tensor4j.models.chat.ChatGenerationMode;
 import com.github.tensor4j.models.chat.ChatGenerationOptions;
 import com.github.tensor4j.models.chat.ChatModel;
+import com.github.tensor4j.models.chat.fixture.MiniChatGgufBuilder.ChatDemo;
+import java.util.List;
+import org.junit.jupiter.api.condition.EnabledIf;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -26,20 +28,24 @@ import org.junit.jupiter.api.Test;
 class MiniChatDemoIT {
 
     @Test
+    @EnabledIf("com.github.tensor4j.models.chat.fixture.ChatDemoVocab#fullFixturePresent")
     void miniGgufTokenizesAndGeneratesQualityCompletions() throws Exception {
         ChatDemoReporter.banner("mini GGUF tokenize + quality generate");
-        ChatModel model = ChatSession.loadMiniModel();
+        ChatModel model = ChatSession.loadOpenModel();
         ChatGenerationOptions options = ChatSession.optionsFor(model);
-        ChatDemoReporter.modelInfo(model, "MiniChatGgufBuilder.buildChatDemoModel()");
+        ChatDemoReporter.modelInfo(model, "MiniChatGgufBuilder.buildOpenChatDemoModel()");
 
         assertTrue(model.config().nVocab() > 0);
         assertTrue(BpePreType.LLAMA3 == model.tokenizer().preType());
         assertTrue(options.mode() == ChatGenerationMode.QUALITY);
+        assertTrue(model.config().nEmbd() == ChatDemo.N_EMBD);
+        assertTrue(model.config().nLayer() == ChatDemo.N_LAYER);
+        assertTrue(model.config().nCtx() == ChatDemo.N_CTX);
+        assertTrue(model.config().nVocab() == ChatDemo.FULL_VOCAB);
 
         List<String> prompts = DemoPrompts.load();
         int ok = 0;
-        for (int i = 0; i < prompts.size(); i++) {
-            String prompt = prompts.get(i);
+        for (String prompt : prompts) {
             if ("exit".equalsIgnoreCase(prompt)) {
                 continue;
             }
@@ -54,12 +60,10 @@ class MiniChatDemoIT {
             assertTrue(logits.length == model.config().nVocab());
 
             ChatSession.GenerationResult generated = ChatSession.generate(model, prompt, options);
-            ChatDemoReporter.generation(prompt, generated.text(), generated.tokenCount(), generated.mode());
-            if ("Hello".equals(prompt)) {
-                assertFalse(generated.text().isBlank(), "Hello should produce a non-empty completion");
-                assertTrue(generated.text().contains("there"), "Hello completion should include 'there'");
-            }
+            ChatDemoReporter.generation(
+                    prompt, generated.text(), generated.tokenCount(), generated.mode(), generated.prefixReuseTokens());
             if (!generated.text().isBlank()) {
+                ChatSession.assertRealCompletion(generated.text());
                 ok++;
             }
         }

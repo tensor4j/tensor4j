@@ -48,15 +48,12 @@ final class Gpt2ByteEncoder {
         int n = 0;
         for (int b = 33; b <= 126; b++) {
             map.put(b, String.valueOf((char) b));
-            n++;
         }
         for (int b = 161; b <= 172; b++) {
             map.put(b, String.valueOf((char) b));
-            n++;
         }
         for (int b = 174; b <= 255; b++) {
             map.put(b, String.valueOf((char) b));
-            n++;
         }
         for (int b = 0; b <= 255; b++) {
             if (!map.containsKey(b)) {

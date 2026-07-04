@@ -4,40 +4,186 @@
   "notes": "Lazy op chains realized once; expected data is tinygrad numpy() output.",
   "cases": [
     {
-      "name": "permute_then_reshape",
-      "input": {"shape": [2, 3], "data": [1, 2, 3, 4, 5, 6]},
+      "input": {
+        "shape": [
+          2,
+          3
+        ],
+        "data": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
       "ops": [
-        {"op": "permute", "order": [1, 0]},
-        {"op": "reshape", "shape": [6]}
+        {
+          "op": "permute",
+          "order": [
+            1,
+            0
+          ]
+        },
+        {
+          "op": "reshape",
+          "shape": [
+            6
+          ]
+        }
       ],
-      "expected": {"shape": [6], "data": [1, 4, 2, 5, 3, 6]}
-    },
-    {
-      "name": "expand_row",
-      "input": {"shape": [1, 3], "data": [1, 2, 3]},
-      "ops": [{"op": "expand", "shape": [2, 3]}],
-      "expected": {"shape": [2, 3], "data": [1, 2, 3, 1, 2, 3]}
-    },
-    {
-      "name": "broadcast_add",
-      "inputs": [
-        {"shape": [3, 1], "data": [1, 2, 3]},
-        {"shape": [1, 4], "data": [10, 20, 30, 40]}
-      ],
-      "ops": [{"op": "add"}],
       "expected": {
-        "shape": [3, 4],
-        "data": [11, 21, 31, 41, 12, 22, 32, 42, 13, 23, 33, 43]
-      }
+        "shape": [
+          6
+        ],
+        "data": [
+          1.0,
+          4.0,
+          2.0,
+          5.0,
+          3.0,
+          6.0
+        ]
+      },
+      "name": "permute_then_reshape"
     },
     {
-      "name": "relu_mul",
-      "input": {"shape": [5], "data": [-2, -1, 0, 1, 2]},
+      "input": {
+        "shape": [
+          1,
+          3
+        ],
+        "data": [
+          1,
+          2,
+          3
+        ]
+      },
       "ops": [
-        {"op": "mul_scalar", "other": {"shape": [5], "data": [2, 2, 2, 2, 2]}},
-        {"op": "relu"}
+        {
+          "op": "expand",
+          "shape": [
+            2,
+            3
+          ]
+        }
       ],
-      "expected": {"shape": [5], "data": [0, 0, 0, 2, 4]}
+      "expected": {
+        "shape": [
+          2,
+          3
+        ],
+        "data": [
+          1.0,
+          2.0,
+          3.0,
+          1.0,
+          2.0,
+          3.0
+        ]
+      },
+      "name": "expand_row"
+    },
+    {
+      "inputs": [
+        {
+          "shape": [
+            3,
+            1
+          ],
+          "data": [
+            1.0,
+            2.0,
+            3.0
+          ]
+        },
+        {
+          "shape": [
+            1,
+            4
+          ],
+          "data": [
+            10.0,
+            20.0,
+            30.0,
+            40.0
+          ]
+        }
+      ],
+      "ops": [
+        {
+          "op": "add"
+        }
+      ],
+      "expected": {
+        "shape": [
+          3,
+          4
+        ],
+        "data": [
+          11.0,
+          21.0,
+          31.0,
+          41.0,
+          12.0,
+          22.0,
+          32.0,
+          42.0,
+          13.0,
+          23.0,
+          33.0,
+          43.0
+        ]
+      },
+      "name": "broadcast_add"
+    },
+    {
+      "input": {
+        "shape": [
+          5
+        ],
+        "data": [
+          -2,
+          -1,
+          0,
+          1,
+          2
+        ]
+      },
+      "ops": [
+        {
+          "op": "mul_scalar",
+          "other": {
+            "shape": [
+              5
+            ],
+            "data": [
+              2,
+              2,
+              2,
+              2,
+              2
+            ]
+          }
+        },
+        {
+          "op": "relu"
+        }
+      ],
+      "expected": {
+        "shape": [
+          5
+        ],
+        "data": [
+          0.0,
+          0.0,
+          0.0,
+          2.0,
+          4.0
+        ]
+      },
+      "name": "relu_mul"
     }
   ]
 }

@@ -1,0 +1,186 @@
+{
+  "captureVersion": 1,
+  "tinygradVersion": "unknown",
+  "cases": [
+    {
+      "name": "gumbel_v3_seed42",
+      "path": "apps_llm_gumbel",
+      "logitsShape": [
+        3
+      ],
+      "logits": [
+        1.0,
+        2.0,
+        0.5
+      ],
+      "temperature": 0.7,
+      "tensorSeed": 42,
+      "runtimeToken": 1
+    },
+    {
+      "name": "gumbel_v5_seed7",
+      "path": "apps_llm_gumbel",
+      "logitsShape": [
+        5
+      ],
+      "logits": [
+        1.0,
+        5.0,
+        4.0,
+        0.0,
+        -10.0
+      ],
+      "temperature": 1.0,
+      "tensorSeed": 7,
+      "runtimeToken": 1
+    },
+    {
+      "name": "gumbel_v4_low_temp",
+      "path": "apps_llm_gumbel",
+      "logitsShape": [
+        4
+      ],
+      "logits": [
+        1.0,
+        5.0,
+        2.0,
+        0.0
+      ],
+      "temperature": 0.01,
+      "tensorSeed": 42,
+      "runtimeToken": 1
+    },
+    {
+      "name": "llama_v4_tensor_seed_0",
+      "path": "llama_sample",
+      "logitsShape": [
+        4
+      ],
+      "logits": [
+        0.0,
+        1.0,
+        2.0,
+        3.0
+      ],
+      "temperature": 1.0,
+      "tensorSeed": 0,
+      "topK": 0,
+      "topP": 1.0,
+      "alphaFrequency": 0.0,
+      "alphaPresence": 0.0,
+      "alphaCounts": null,
+      "runtimeToken": 3
+    },
+    {
+      "name": "llama_v4_tensor_seed_99",
+      "path": "llama_sample",
+      "logitsShape": [
+        4
+      ],
+      "logits": [
+        0.0,
+        1.0,
+        2.0,
+        3.0
+      ],
+      "temperature": 1.0,
+      "tensorSeed": 99,
+      "topK": 0,
+      "topP": 1.0,
+      "alphaFrequency": 0.0,
+      "alphaPresence": 0.0,
+      "alphaCounts": null,
+      "runtimeToken": 3
+    },
+    {
+      "name": "llama_v5_topk2_topp09_seed_0",
+      "path": "llama_sample",
+      "logitsShape": [
+        5
+      ],
+      "logits": [
+        1.0,
+        5.0,
+        4.0,
+        0.0,
+        -10.0
+      ],
+      "temperature": 1.0,
+      "tensorSeed": 0,
+      "topK": 2,
+      "topP": 0.9,
+      "alphaFrequency": 0.0,
+      "alphaPresence": 0.0,
+      "alphaCounts": null,
+      "runtimeToken": 1
+    },
+    {
+      "name": "llama_v5_topk2_topp09_seed_42",
+      "path": "llama_sample",
+      "logitsShape": [
+        5
+      ],
+      "logits": [
+        1.0,
+        5.0,
+        4.0,
+        0.0,
+        -10.0
+      ],
+      "temperature": 1.0,
+      "tensorSeed": 42,
+      "topK": 2,
+      "topP": 0.9,
+      "alphaFrequency": 0.0,
+      "alphaPresence": 0.0,
+      "alphaCounts": null,
+      "runtimeToken": 2
+    },
+    {
+      "name": "llama_alpha_fp_seed_0",
+      "path": "llama_sample",
+      "logitsShape": [
+        3
+      ],
+      "logits": [
+        0.0,
+        10.0,
+        10.0
+      ],
+      "temperature": 1.0,
+      "tensorSeed": 0,
+      "topK": 0,
+      "topP": 1.0,
+      "alphaFrequency": 0.1,
+      "alphaPresence": 0.5,
+      "alphaCounts": [
+        1,
+        1
+      ],
+      "runtimeToken": 2
+    },
+    {
+      "name": "llama_alpha_fp_seed_17",
+      "path": "llama_sample",
+      "logitsShape": [
+        3
+      ],
+      "logits": [
+        0.0,
+        10.0,
+        10.0
+      ],
+      "temperature": 1.0,
+      "tensorSeed": 17,
+      "topK": 0,
+      "topP": 1.0,
+      "alphaFrequency": 0.1,
+      "alphaPresence": 0.5,
+      "alphaCounts": [
+        1,
+        1
+      ],
+      "runtimeToken": 1
+    }
+  ]
+}

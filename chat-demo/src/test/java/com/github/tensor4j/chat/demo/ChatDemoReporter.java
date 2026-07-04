@@ -52,11 +52,14 @@ final class ChatDemoReporter {
         System.out.printf(Locale.US, "  prompt:    %s%n  skipped:   %s%n", prompt, reason);
     }
 
-    static void generation(String prompt, String completion, int tokensGenerated, String mode) {
+    static void generation(String prompt, String completion, int tokensGenerated, String mode, int prefixReuse) {
         System.out.printf(java.util.Locale.US, "  prompt:    %s%n", prompt);
         System.out.printf(java.util.Locale.US, "  mode:      %s%n", mode);
         System.out.printf(java.util.Locale.US, "  completion:%s%n", completion.isEmpty() ? " (empty)" : " " + completion);
         System.out.printf(java.util.Locale.US, "  new tokens:%d%n", tokensGenerated);
+        if (prefixReuse > 0) {
+            System.out.printf(java.util.Locale.US, "  kv reuse:  %d prefix tokens%n", prefixReuse);
+        }
     }
 
     static void summary(int prompts, int ok) {

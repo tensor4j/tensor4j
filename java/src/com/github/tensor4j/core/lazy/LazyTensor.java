@@ -46,6 +46,16 @@ public final class LazyTensor {
         return new LazyTensor(LazyUOp.buffer(tensor));
     }
 
+    /** Lazy GGUF slice load (Q4_0 dequant or F32 mmap). */
+    public static LazyTensor ggufLoad(LazyGgufSlice slice) {
+        return new LazyTensor(LazyGgufLoad.fromSlice(slice));
+    }
+
+    /** Lazy Q4_0 dequant from mmap quant bytes (tinygrad {@code ggml_data_to_tensor}). */
+    public static LazyTensor dequantQ4(LazyGgufSlice slice) {
+        return ggufLoad(slice);
+    }
+
     /** Root {@link LazyUOp} node for this tensor (tinygrad {@code Tensor.uop}). */
     public LazyUOp uop() {
         return uop;

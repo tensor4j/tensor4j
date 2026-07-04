@@ -45,9 +45,9 @@ public final class LlamaAttentionForward {
         validateWeights(nEmbd, headDim, kvWidth, wq, wk, wv, wo);
 
         InferTensor normed = GgmlOps.rmsNorm(x, attnNormWeight, rmsEps);
-        InferTensor q = GgmlOps.mulMat(normed, wq);
-        InferTensor kCur = GgmlOps.mulMat(normed, wk);
-        InferTensor vCur = GgmlOps.mulMat(normed, wv);
+        InferTensor q = GgmlOps.mulMatOut(normed, wq);
+        InferTensor kCur = GgmlOps.mulMatOut(normed, wk);
+        InferTensor vCur = GgmlOps.mulMatOut(normed, wv);
 
         if (positions == null) {
             positions = defaultPositions(x.rows(), cache.nKv());
@@ -72,13 +72,13 @@ public final class LlamaAttentionForward {
             InferTensor vHead = cache.valuesForHead(kvHead);
             InferTensor scores = GgmlOps.scale(GgmlOps.qkScores(qHead, kHead), scale);
             if (causal) {
-                scores = applyCausalMask(scores, pastKv);
+                scores = GgmlOps.applyCausalMask(scores, pastKv);
             }
             InferTensor probs = GgmlOps.softmaxRows(scores);
             headOut[h] = GgmlOps.attnContext(probs, vHead);
         }
         InferTensor merged = mergeHeads(headOut, headDim);
-        return GgmlOps.mulMat(merged, wo);
+        return GgmlOps.mulMatOut(merged, wo);
     }
 
     private static int[] defaultPositions(int rows, int pastKv) {
@@ -98,8 +98,8 @@ public final class LlamaAttentionForward {
     private static void validateWeights(int nEmbd, int headDim, int kvWidth, InferTensor wq, InferTensor wk,
             InferTensor wv, InferTensor wo) {
         requireMatrix(wq, nEmbd, nEmbd, "wq");
-        requireMatrix(wk, nEmbd, kvWidth, "wk");
-        requireMatrix(wv, nEmbd, kvWidth, "wv");
+        requireMatrix(wk, kvWidth, nEmbd, "wk");
+        requireMatrix(wv, kvWidth, nEmbd, "wv");
         requireMatrix(wo, nEmbd, nEmbd, "wo");
         if (headDim * (nEmbd / headDim) != nEmbd) {
             throw new IllegalArgumentException("invalid embedding width " + nEmbd);
@@ -137,21 +137,5 @@ public final class LlamaAttentionForward {
             }
         }
         return InferTensor.of(out, nTokens, nHead * headDim);
-    }
-
-    private static InferTensor applyCausalMask(InferTensor scores, int pastKv) {
-        float[] out = scores.data().clone();
-        int cols = scores.cols();
-        int rows = scores.rows();
-        for (int r = 0; r < rows; r++) {
-            int globalPos = pastKv + r;
-            int offset = r * cols;
-            for (int c = 0; c < cols; c++) {
-                if (c > globalPos) {
-                    out[offset + c] = Float.NEGATIVE_INFINITY;
-                }
-            }
-        }
-        return InferTensor.of(out, rows, cols);
     }
 }

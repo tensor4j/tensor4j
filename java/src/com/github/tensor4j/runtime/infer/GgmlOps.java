@@ -41,6 +41,35 @@ public final class GgmlOps {
         return InferTensor.of(out, m, n);
     }
 
+    /**
+     * Output-major weight {@code [out,in]}: {@code y[i] = sum_j W[i,j]*x[j]} (llama {@code wq @ x}).
+     */
+    public static InferTensor mulMatOut(InferTensor x, InferTensor wOutIn) {
+        int in = x.cols();
+        int out = wOutIn.rows();
+        if (wOutIn.cols() != in) {
+            throw new IllegalArgumentException("mulMatOut shape mismatch: x " + x.rows() + "x" + x.cols()
+                    + " w " + wOutIn.rows() + "x" + wOutIn.cols());
+        }
+        float[] result = new float[x.rows() * out];
+        float[] xd = x.data();
+        float[] wd = wOutIn.data();
+        int wCols = wOutIn.cols();
+        for (int row = 0; row < x.rows(); row++) {
+            int xBase = row * in;
+            int rBase = row * out;
+            for (int i = 0; i < out; i++) {
+                float sum = 0.0f;
+                int wRow = i * wCols;
+                for (int j = 0; j < in; j++) {
+                    sum += xd[xBase + j] * wd[wRow + j];
+                }
+                result[rBase + i] = sum;
+            }
+        }
+        return InferTensor.of(result, x.rows(), out);
+    }
+
     public static InferTensor add(InferTensor a, InferTensor b) {
         requireSameShape(a, b);
         float[] out = new float[a.data().length];
@@ -91,12 +120,12 @@ public final class GgmlOps {
         int cols = x.cols();
         for (int r = 0; r < x.rows(); r++) {
             int offset = r * cols;
-            double sumSq = 0.0;
+            float sumSq = 0.0f;
             for (int c = 0; c < cols; c++) {
                 float v = xd[offset + c];
-                sumSq += (double) v * v;
+                sumSq += v * v;
             }
-            float scale = (float) (1.0 / Math.sqrt(sumSq / cols + eps));
+            float scale = (float) (1.0 / Math.sqrt((double) sumSq / cols + eps));
             for (int c = 0; c < cols; c++) {
                 float v = xd[offset + c] * scale;
                 if (wd != null) {
@@ -188,6 +217,23 @@ public final class GgmlOps {
     /** weights [n_t,n_k] x V [n_k,d] -> context [n_t,d]. */
     public static InferTensor attnContext(InferTensor weights, InferTensor v) {
         return mulMat(weights, v);
+    }
+
+    /** Mask future KV columns with {@code -inf} (causal attention, llama-graph mask). */
+    public static InferTensor applyCausalMask(InferTensor scores, int pastKv) {
+        float[] out = scores.data().clone();
+        int cols = scores.cols();
+        int rows = scores.rows();
+        for (int r = 0; r < rows; r++) {
+            int globalPos = pastKv + r;
+            int offset = r * cols;
+            for (int c = 0; c < cols; c++) {
+                if (c > globalPos) {
+                    out[offset + c] = Float.NEGATIVE_INFINITY;
+                }
+            }
+        }
+        return InferTensor.of(out, rows, cols);
     }
 
     private static void requireSameShape(InferTensor a, InferTensor b) {

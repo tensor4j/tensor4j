@@ -85,6 +85,20 @@ public record ChatConfig(
                 ropeDim, scaling, scaleFactor, origCtx, yarnExt, yarnAttn);
     }
 
+    /** Cap ring KV allocation (GGUF {@code llama.context_length} is often 128k+). */
+    public ChatConfig withMaxCtx(int maxCtx) {
+        if (maxCtx <= 0) {
+            throw new IllegalArgumentException("maxCtx must be positive");
+        }
+        int capped = Math.min(nCtx, maxCtx);
+        if (capped == nCtx) {
+            return this;
+        }
+        return new ChatConfig(
+                nVocab, nEmbd, nHead, nHeadKv, nLayer, capped, rmsEps, ropeBase,
+                ropeDim, ropeScaling, ropeScaleFactor, ropeOrigCtx, yarnExtFactor, yarnAttnFactor);
+    }
+
     private static RopeScalingType parseScaling(String value) {
         if ("yarn".equalsIgnoreCase(value)) {
             return RopeScalingType.YARN;

@@ -28,8 +28,13 @@
     </dependency>
   </dependencies>
 
-  <build>
+    <build>
     <sourceDirectory>java/src</sourceDirectory>
+    <resources>
+      <resource>
+        <directory>java/resources</directory>
+      </resource>
+    </resources>
     <testSourceDirectory>java/test</testSourceDirectory>
     <testResources>
       <testResource>

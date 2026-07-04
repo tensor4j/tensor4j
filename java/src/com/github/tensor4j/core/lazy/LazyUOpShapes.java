@@ -115,6 +115,8 @@ final class LazyUOpShapes {
                 return LazyMaxUnpool2d.outputShapeFromPacked(node.arg());
             case MAX_UNPOOL2D_VALUE_GRAD:
                 return LazyMaxUnpool2d.valueShapeFromGradPacked(node.arg());
+            case DEQUANT_Q4_0, MMAP_F32:
+                return node.ggufSlice().floatShape().clone();
             default:
                 throw new IllegalStateException("unhandled op " + node.op());
         }

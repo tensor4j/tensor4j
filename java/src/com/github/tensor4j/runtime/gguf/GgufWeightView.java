@@ -12,14 +12,39 @@ package com.github.tensor4j.runtime.gguf;
 import com.github.tensor4j.runtime.infer.InferTensor;
 
 /** Lazy GGUF weight view; dequant reads directly from slice without quant-byte copy. */
-public record GgufWeightView(GgufTensorSlice slice) {
+public record GgufWeightView(GgufTensorSlice slice, LlamaQkLayout qkLayout, int qkHeads) {
+
+    public GgufWeightView(GgufTensorSlice slice) {
+        this(slice, LlamaQkLayout.NONE, 0);
+    }
 
     public float[] dequantizeToFloat() {
         return GgufWeightLoader.dequantizeSlice(slice);
     }
 
     public InferTensor toMatrix() {
-        return GgufWeightLoader.fromGgmlMatrix(slice.shape(), dequantizeToFloat());
+        return toMatrix(qkLayout, qkHeads);
+    }
+
+    /**
+     * Matrix load with optional llama Q/K permute (tinygrad {@code from_gguf}).
+     */
+    public InferTensor toMatrix(LlamaQkLayout layout, int nHeads) {
+        float[] data = dequantizeToFloat();
+        long[] ne = slice.shape().ne();
+        int rows = (int) ne[0];
+        int cols = slice.shape().rank() >= 2 ? (int) ne[1] : 1;
+        if (layout == LlamaQkLayout.PERMUTE_QK && nHeads > 0) {
+            GgufLlamaLayout.permuteQkInterleaved(data, rows, cols, nHeads);
+        } else if (layout == LlamaQkLayout.PERMUTE_QK_KV && nHeads > 0) {
+            rows = cols;
+            cols = (int) ne[0];
+            GgufLlamaLayout.permuteQkInterleaved(data, rows, cols, nHeads);
+        } else if (layout == LlamaQkLayout.REVERSE_GGUF_DIMS) {
+            rows = cols;
+            cols = (int) ne[0];
+        }
+        return InferTensor.of(data, rows, cols);
     }
 
     public InferTensor toEmbedding() {

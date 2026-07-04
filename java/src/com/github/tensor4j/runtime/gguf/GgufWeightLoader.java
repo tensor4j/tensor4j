@@ -23,7 +23,12 @@ public final class GgufWeightLoader {
     }
 
     public static GgufWeightView loadView(GgufTensorSource source, String name) {
-        return new GgufWeightView(source.tensorSlice(name));
+        return loadView(source, name, LlamaQkLayout.NONE, 0);
+    }
+
+    public static GgufWeightView loadView(
+            GgufTensorSource source, String name, LlamaQkLayout qkLayout, int nHeads) {
+        return new GgufWeightView(source.tensorSlice(name), qkLayout, nHeads);
     }
 
     public static InferTensor loadMatrix(GgufFile file, String name) {
@@ -64,6 +69,15 @@ public final class GgufWeightLoader {
         }
         if (slice.type() == GgmlType.Q4_0) {
             return GgmlQuant.dequantizeQ4_0(slice.buffer(), slice.offset(), slice.shape());
+        }
+        if (slice.type() == GgmlType.F16) {
+            return GgmlQuant.dequantizeF16(slice.buffer(), slice.offset(), slice.shape());
+        }
+        if (slice.type() == GgmlType.Q4_K) {
+            return GgmlQuant.dequantizeQ4_K(slice.buffer(), slice.offset(), slice.shape());
+        }
+        if (slice.type() == GgmlType.Q6_K) {
+            return GgmlQuant.dequantizeQ6_K(slice.buffer(), slice.offset(), slice.shape());
         }
         throw new IllegalArgumentException("unsupported tensor type " + slice.type() + " for " + slice.name());
     }

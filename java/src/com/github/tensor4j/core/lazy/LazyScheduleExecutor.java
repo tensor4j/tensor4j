@@ -47,7 +47,9 @@ final class LazyScheduleExecutor {
                 || node.op() == LazyUOp.Kind.CONV_TRANSPOSE2D_INPUT_GRAD
                 || node.op() == LazyUOp.Kind.CONV_TRANSPOSE2D_WEIGHT_GRAD
                 || node.op() == LazyUOp.Kind.MAX_UNPOOL2D
-                || node.op() == LazyUOp.Kind.MAX_UNPOOL2D_VALUE_GRAD) {
+                || node.op() == LazyUOp.Kind.MAX_UNPOOL2D_VALUE_GRAD
+                || node.op() == LazyUOp.Kind.DEQUANT_Q4_0
+                || node.op() == LazyUOp.Kind.MMAP_F32) {
             return realizeWithMemo(node, memo);
         }
         if (LazyFusion.isElementwise(node.op())) {

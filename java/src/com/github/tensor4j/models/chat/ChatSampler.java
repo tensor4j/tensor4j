@@ -11,7 +11,10 @@ package com.github.tensor4j.models.chat;
 
 import java.util.Random;
 
-/** Token selection from logits — argmax or temperature + top-k/top-p sampling. */
+/**
+ * Token selection from logits — argmax, or tinygrad-style sampling
+ * ({@code extra/models/llama.py} alpha + top-k/top-p, {@code apps/llm.py} Gumbel-max).
+ */
 public final class ChatSampler {
 
     private ChatSampler() {
@@ -33,18 +36,51 @@ public final class ChatSampler {
     }
 
     public static int sample(float[] logits, ChatGenerationOptions options, int tokensGenerated, Random rng) {
+        return sample(logits, options, tokensGenerated, null, new ChatSamplingRng(rng));
+    }
+
+    public static int sample(
+            float[] logits,
+            ChatGenerationOptions options,
+            int tokensGenerated,
+            ChatSamplerState state,
+            Random rng) {
+        return sample(logits, options, tokensGenerated, state, new ChatSamplingRng(rng));
+    }
+
+    public static int sample(
+            float[] logits,
+            ChatGenerationOptions options,
+            int tokensGenerated,
+            ChatSamplerState state,
+            ChatSamplingRng samplingRng) {
         float[] work = logits.clone();
+        sanitizeNaNs(work);
         if (tokensGenerated < options.minNewTokens()) {
             maskToken(work, options.bosId());
             maskToken(work, options.eosId());
+        }
+        if (state != null) {
+            state.applyAlphaPenalties(work, options.alphaFrequency(), options.alphaPresence());
         }
         if (options.mode() == ChatGenerationMode.GREEDY || options.temperature() < 1e-6f) {
             return argmax(work);
         }
         applyTopK(work, options.topK());
+        if (options.gumbelMax()) {
+            return sampleGumbelMax(work, options.temperature(), samplingRng);
+        }
         float[] probs = softmaxTemperature(work, options.temperature());
         applyTopP(probs, options.topP());
-        return sampleMultinomial(probs, rng);
+        return sampleMultinomial(probs, samplingRng);
+    }
+
+    private static void sanitizeNaNs(float[] logits) {
+        for (int i = 0; i < logits.length; i++) {
+            if (Float.isNaN(logits[i])) {
+                logits[i] = Float.NEGATIVE_INFINITY;
+            }
+        }
     }
 
     private static void maskToken(float[] logits, int tokenId) {
@@ -80,6 +116,25 @@ public final class ChatSampler {
             copy[best] = tmp;
         }
         return copy[target];
+    }
+
+    private static int sampleGumbelMax(float[] logits, float temperature, ChatSamplingRng rng) {
+        float temp = Math.max(temperature, (float) ChatSamplingRng.MIN_UNIFORM);
+        int best = 0;
+        double bestScore = Double.NEGATIVE_INFINITY;
+        for (int i = 0; i < logits.length; i++) {
+            // tinygrad apps/llm.py: Tensor.rand_like(logits) draws noise for every vocab index
+            double gumbel = rng.nextStandardGumbel();
+            if (logits[i] == Float.NEGATIVE_INFINITY) {
+                continue;
+            }
+            double score = logits[i] / temp + gumbel;
+            if (score > bestScore) {
+                bestScore = score;
+                best = i;
+            }
+        }
+        return best;
     }
 
     private static float[] softmaxTemperature(float[] logits, float temperature) {
@@ -160,8 +215,15 @@ public final class ChatSampler {
         return order;
     }
 
-    private static int sampleMultinomial(float[] probs, Random rng) {
-        double roll = rng.nextDouble();
+    private static int sampleMultinomial(float[] probs, ChatSamplingRng rng) {
+        return multinomialAtRoll(probs, rng.nextMultinomialRoll());
+    }
+
+    /**
+     * Inverse-CDF pick from a 1d probability vector — tinygrad {@code Tensor.multinomial()}.
+     * {@code roll} is in [0,1) (same shape semantics as {@code ChatSamplingRng#nextMultinomialRoll()}).
+     */
+    public static int multinomialAtRoll(float[] probs, double roll) {
         double cumulative = 0d;
         for (int i = 0; i < probs.length; i++) {
             cumulative += probs[i];
@@ -170,5 +232,33 @@ public final class ChatSampler {
             }
         }
         return argmax(probs);
+    }
+
+    /** Top-k mask on 1d logits (tinygrad {@code sample()} k-loop, applied before softmax in llama.py). */
+    static float[] topKFilteredLogits(float[] logits, int topK) {
+        float[] work = logits.clone();
+        applyTopK(work, topK);
+        return work;
+    }
+
+    /** Softmax(logits / temperature) returning 1d probs summing to 1. */
+    static float[] temperatureSoftmax(float[] logits, float temperature) {
+        return softmaxTemperature(logits, temperature);
+    }
+
+    /** Nucleus top-p filter on 1d probs, renormalized — tinygrad approximate top-p on top-k mass. */
+    static float[] topPNucleusProbs(float[] probs, float topP) {
+        float[] work = probs.clone();
+        applyTopP(work, topP);
+        return work;
+    }
+
+    /** Alpha-adjusted logits — tinygrad {@code logits - counter*af - (counter>0)*ap}. */
+    static float[] alphaAdjustedLogits(float[] logits, ChatSamplerState state, float alphaF, float alphaP) {
+        float[] work = logits.clone();
+        if (state != null) {
+            state.applyAlphaPenalties(work, alphaF, alphaP);
+        }
+        return work;
     }
 }

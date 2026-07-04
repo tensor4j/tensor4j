@@ -58,10 +58,10 @@ public final class LlamaBlockForward {
                 true);
         InferTensor afterAttn = GgmlOps.add(x, attnOut);
         InferTensor ffnIn = GgmlOps.rmsNorm(afterAttn, weights.ffnNorm().tensor(), rmsEps);
-        InferTensor gate = GgmlOps.mulMat(ffnIn, weights.wGate().tensor());
-        InferTensor up = GgmlOps.mulMat(ffnIn, weights.wUp().tensor());
+        InferTensor gate = GgmlOps.mulMatOut(ffnIn, weights.wGate().tensor());
+        InferTensor up = GgmlOps.mulMatOut(ffnIn, weights.wUp().tensor());
         InferTensor ffnMid = GgmlOps.swiglu(gate, up);
-        InferTensor ffnOut = GgmlOps.mulMat(ffnMid, weights.wDown().tensor());
+        InferTensor ffnOut = GgmlOps.mulMatOut(ffnMid, weights.wDown().tensor());
         return GgmlOps.add(afterAttn, ffnOut);
     }
 }

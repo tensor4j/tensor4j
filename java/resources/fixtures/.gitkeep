@@ -1,0 +1,2 @@
+# Regenerate: python tools/capture_tinygrad_chat_vocab.py --mode pruned
+# Full vocab (default, gitignored): --mode full

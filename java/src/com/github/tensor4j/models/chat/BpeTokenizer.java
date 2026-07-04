@@ -106,20 +106,10 @@ final class BpeTokenizer {
     }
 
     private void encodeWord(String word, List<Integer> out) {
-        if (preType == BpePreType.WHITESPACE && tokenToId.containsKey(word)) {
-            out.add(tokenToId.get(word));
+        Integer whole = tokenToId.get(word);
+        if (whole != null) {
+            out.add(whole);
             return;
-        }
-        if (ignoreMerges && tokenToId.containsKey(word)) {
-            out.add(tokenToId.get(word));
-            return;
-        }
-        if (preType == BpePreType.GEMMA4 && isNewlineOnly(word)) {
-            Integer id = tokenToId.get(word);
-            if (id != null) {
-                out.add(id);
-                return;
-            }
         }
 
         List<Symbol> symbols = new ArrayList<>();

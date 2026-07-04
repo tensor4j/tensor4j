@@ -9,13 +9,15 @@
  */
 package com.github.tensor4j.chat.demo;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.github.tensor4j.models.chat.ChatGenerationOptions;
+import com.github.tensor4j.models.chat.ChatSamplingRngMode;
+import com.github.tensor4j.models.chat.ChatGenerationResult;
+import com.github.tensor4j.models.chat.ChatGenerator;
 import com.github.tensor4j.models.chat.ChatModel;
-import com.github.tensor4j.models.chat.ChatSampler;
-import com.github.tensor4j.models.chat.ChatTokenizer;
+import com.github.tensor4j.models.chat.ChatTemplate;
 import com.github.tensor4j.models.chat.fixture.MiniChatGgufBuilder;
-import com.github.tensor4j.runtime.gguf.GgufFile;
-import java.util.Random;
 
 /** Decode loop helpers for chat-demo integration tests. */
 final class ChatSession {
@@ -29,34 +31,43 @@ final class ChatSession {
         return ChatModel.fromGguf(MiniChatGgufBuilder.buildChatDemoModel());
     }
 
+    /** Seeded open-ended level-12 fixture (tinygrad real-GGUF path, not token chain). */
+    static ChatModel loadOpenModel() {
+        return ChatModel.fromGguf(MiniChatGgufBuilder.buildOpenChatDemoModel());
+    }
+
+    static ChatTemplate templateForDemo() {
+        return ChatTemplate.fromEnvironment();
+    }
+
+    /** Quality sampling defaults (SecureRandom) — completions vary run-to-run. */
     static ChatGenerationOptions optionsFor(ChatModel model) {
         return ChatGenerationOptions.fromEnvironment(model.tokenizer());
     }
 
-    static GenerationResult generate(ChatModel model, String prompt, ChatGenerationOptions options) {
-        model.resetCache();
-        ChatTokenizer tokenizer = model.tokenizer();
-        Random rng = new Random(options.seed());
-        int[] promptIds = tokenizer.encode(prompt);
-        float[] logits = model.forward(promptIds);
+    /** Seeded legacy RNG for sampler reproducibility unit tests only. */
+    static ChatGenerationOptions optionsForSeededDemo(ChatModel model) {
+        return ChatGenerationOptions.quality(model.tokenizer(), ChatSamplingRngMode.LEGACY);
+    }
 
-        StringBuilder completion = new StringBuilder();
-        int generated = 0;
-        for (int step = 0; step < options.maxNewTokens(); step++) {
-            int next = ChatSampler.sample(logits, options, generated, rng);
-            if (next == tokenizer.eosId() && generated >= options.minNewTokens()) {
-                break;
-            }
-            if (next == tokenizer.bosId() || next == tokenizer.eosId()) {
-                logits = model.forward(new int[] {next});
-                continue;
-            }
-            String piece = tokenizer.decode(new int[] {next});
-            completion.append(piece);
-            generated++;
-            logits = model.forward(new int[] {next});
-        }
-        return new GenerationResult(completion.toString(), generated, options.mode().name());
+    /** Model produced non-trivial decoded text (sampling variance allowed). */
+    static void assertRealCompletion(String text) {
+        assertTrue(text.length() > 1, () -> "expected completion length > 1, got: " + text);
+    }
+
+    static GenerationResult generate(ChatModel model, String prompt, ChatGenerationOptions options) {
+        return generate(model, prompt, options, ChatTemplate.PLAIN);
+    }
+
+    static GenerationResult generate(
+            ChatModel model, String prompt, ChatGenerationOptions options, ChatTemplate template) {
+        ChatGenerator generator = new ChatGenerator(model, options);
+        ChatGenerationResult result = generator.generate(prompt, template);
+        return new GenerationResult(
+                result.text(),
+                result.tokenCount(),
+                result.mode(),
+                result.prefixReuseTokens());
     }
 
     static GenerationResult greedyGenerate(ChatModel model, String prompt, int maxNewTokens) {
@@ -64,6 +75,6 @@ final class ChatSession {
         return generate(model, prompt, options);
     }
 
-    record GenerationResult(String text, int tokenCount, String mode) {
+    record GenerationResult(String text, int tokenCount, String mode, int prefixReuseTokens) {
     }
 }

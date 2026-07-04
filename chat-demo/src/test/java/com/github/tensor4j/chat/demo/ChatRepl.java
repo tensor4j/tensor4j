@@ -9,8 +9,11 @@
  */
 package com.github.tensor4j.chat.demo;
 
-import com.github.tensor4j.models.chat.ChatModel;
 import com.github.tensor4j.models.chat.ChatGenerationOptions;
+import com.github.tensor4j.models.chat.ChatGenerationResult;
+import com.github.tensor4j.models.chat.ChatGenerator;
+import com.github.tensor4j.models.chat.ChatModel;
+import com.github.tensor4j.models.chat.ChatTemplate;
 
 /** Blocking stdin REPL for manual chat-demo sessions (up to 30 minutes). */
 final class ChatRepl {
@@ -22,8 +25,12 @@ final class ChatRepl {
 
     static void run(ChatModel model, long deadlineMs) throws java.io.IOException {
         ChatGenerationOptions options = ChatSession.optionsFor(model);
+        ChatTemplate template = ChatTemplate.fromEnvironment();
+        ChatGenerator generator = new ChatGenerator(model, options);
         System.out.println("Interactive chat — mode=" + options.mode()
-                + " (TENSOR4J_CHAT_MODE=greedy for argmax). Type 'exit' to quit (30 minute limit).");
+                + " gumbel=" + options.gumbelMax()
+                + " template=" + template.name().toLowerCase()
+                + " (multi-turn KV reuse). Type 'exit' to quit (30 minute limit).");
         java.io.BufferedReader reader = new java.io.BufferedReader(
                 new java.io.InputStreamReader(System.in, java.nio.charset.StandardCharsets.UTF_8));
         while (System.currentTimeMillis() < deadlineMs) {
@@ -41,9 +48,18 @@ final class ChatRepl {
                 System.out.println("chat-demo: goodbye.");
                 break;
             }
-            ChatSession.GenerationResult result = ChatSession.generate(model, line, options);
-            System.out.printf(java.util.Locale.US, "bot> %s%n",
-                    result.text().isEmpty() ? "(no tokens)" : result.text());
+            System.out.print("bot> ");
+            System.out.flush();
+            ChatGenerationResult result = generator.continueConversationStreaming(
+                    line, template, piece -> System.out.printf(java.util.Locale.US, "%s", piece));
+            if (result.tokenCount() == 0) {
+                System.out.print("(no tokens)");
+            }
+            System.out.printf(
+                    java.util.Locale.US,
+                    "%n  [%d new tokens, %d prefix reused]%n",
+                    result.tokenCount(),
+                    result.prefixReuseTokens());
         }
         if (System.currentTimeMillis() >= deadlineMs) {
             System.out.println("chat-demo: 30 minute limit reached.");

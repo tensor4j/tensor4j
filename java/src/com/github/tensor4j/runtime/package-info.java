@@ -14,6 +14,7 @@
  *
  * <p><strong>Boundary:</strong> independent of {@code com.github.tensor4j.core} math.
  * Do not import runtime packages from tinygrad-track code. Algebra ({@code models.algebra})
- * stays on the tinygrad track.
+ * stays on the tinygrad track. For tinygrad lazy UOp / state_dict semantics use
+ * {@code com.github.tensor4j.runtime2}.
  */
 package com.github.tensor4j.runtime;

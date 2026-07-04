@@ -6,3 +6,6 @@
 /tools
 /java/resources/models
 /algebra-demo/src/test/resources/models
+/java/resources/fixtures/tinygrad-llama32-chat-vocab-full.json
+/java/resources/fixtures/tinygrad-llama32-chat-vocab-pruned.json
+/java/resources/fixtures/tinygrad-llama32-chat-vocab.json

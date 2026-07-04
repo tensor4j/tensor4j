@@ -21,13 +21,13 @@ final class LazyUOpCache {
     private LazyUOpCache() {
     }
 
-    static LazyUOp intern(LazyUOp.Kind op, LazyUOp[] src, int[] arg, Tensor buffer) {
-        CacheKey key = new CacheKey(op, src, arg, buffer);
+    static LazyUOp intern(LazyUOp.Kind op, LazyUOp[] src, int[] arg, Tensor buffer, LazyGgufSlice ggufSlice) {
+        CacheKey key = new CacheKey(op, src, arg, buffer, ggufSlice);
         LazyUOp existing = CACHE.get(key);
         if (existing != null) {
             return existing;
         }
-        LazyUOp created = new LazyUOp(op, src, arg, buffer);
+        LazyUOp created = new LazyUOp(op, src, arg, buffer, ggufSlice);
         CACHE.put(key, created);
         return created;
     }
@@ -36,7 +36,7 @@ final class LazyUOpCache {
         CACHE.clear();
     }
 
-    private record CacheKey(LazyUOp.Kind op, LazyUOp[] src, int[] arg, Tensor buffer) {
+    private record CacheKey(LazyUOp.Kind op, LazyUOp[] src, int[] arg, Tensor buffer, LazyGgufSlice ggufSlice) {
         private CacheKey {
             src = src == null ? new LazyUOp[0] : src.clone();
             arg = arg == null ? null : arg.clone();
@@ -48,13 +48,14 @@ final class LazyUOpCache {
                 return false;
             }
             return op == cacheKey.op && java.util.Arrays.equals(src, cacheKey.src)
-                    && java.util.Arrays.equals(arg, cacheKey.arg) && buffer == cacheKey.buffer;
+                    && java.util.Arrays.equals(arg, cacheKey.arg) && buffer == cacheKey.buffer
+                    && ggufSlice == cacheKey.ggufSlice;
         }
 
         @Override
         public int hashCode() {
             return java.util.Arrays.hashCode(new Object[] {op, java.util.Arrays.hashCode(src),
-                    java.util.Arrays.hashCode(arg), buffer});
+                    java.util.Arrays.hashCode(arg), buffer, ggufSlice});
         }
     }
 }

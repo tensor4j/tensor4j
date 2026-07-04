@@ -13,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.github.tensor4j.models.chat.ChatModel;
+import com.github.tensor4j.models.chat.ChatTemplate;
 import com.github.tensor4j.runtime.gguf.MmappedGgufFile;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -35,13 +36,17 @@ class ExternalGgufChatDemoIT {
             ChatDemoReporter.modelInfo(model, path.toAbsolutePath().toString());
 
             String prompt = "Hello";
+            ChatTemplate template = ChatSession.templateForDemo();
             ChatDemoReporter.tokenize(model.tokenizer(), prompt);
-            float[] logits = model.forward(model.tokenizer().encode(prompt));
+            float[] logits = model.forward(template.encodeUser(model.tokenizer(), prompt));
             assertFalse(Float.isNaN(logits[0]));
             assertTrue(logits.length == model.config().nVocab());
 
-            ChatSession.GenerationResult result = ChatSession.generate(model, prompt, ChatSession.optionsFor(model));
-            ChatDemoReporter.generation(prompt, result.text(), result.tokenCount(), result.mode());
+            ChatSession.GenerationResult result = ChatSession.generate(
+                    model, prompt, ChatSession.optionsFor(model), template);
+            ChatDemoReporter.generation(
+                    prompt, result.text(), result.tokenCount(), result.mode(), result.prefixReuseTokens());
+            ChatSession.assertRealCompletion(result.text());
         }
     }
 }

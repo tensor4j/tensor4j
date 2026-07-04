@@ -1,0 +1,71 @@
+{
+  "source": "tinygrad.llm.model.Transformer",
+  "gguf_path": "C:\\Users\\mhickson\\AppData\\Local\\Temp\\Llama-3.2-1B-Instruct-Q4_K_M.gguf",
+  "prompt": "Hello",
+  "token_ids": [
+    9906
+  ],
+  "top_k": 10,
+  "entries": [
+    {
+      "rank": 1,
+      "token_id": 475,
+      "logit": 6.7309794425964355,
+      "piece": "import"
+    },
+    {
+      "rank": 2,
+      "token_id": 3936,
+      "logit": 6.405098915100098,
+      "piece": "Title"
+    },
+    {
+      "rank": 3,
+      "token_id": 14924,
+      "logit": 6.289783000946045,
+      "piece": "Question"
+    },
+    {
+      "rank": 4,
+      "token_id": 2,
+      "logit": 6.261748313903809,
+      "piece": "#"
+    },
+    {
+      "rank": 5,
+      "token_id": 755,
+      "logit": 6.197635173797607,
+      "piece": "def"
+    },
+    {
+      "rank": 6,
+      "token_id": 16309,
+      "logit": 6.115012168884277,
+      "piece": "Tags"
+    },
+    {
+      "rank": 7,
+      "token_id": 315,
+      "logit": 5.839113235473633,
+      "piece": " of"
+    },
+    {
+      "rank": 8,
+      "token_id": 499,
+      "logit": 5.756194591522217,
+      "piece": " you"
+    },
+    {
+      "rank": 9,
+      "token_id": 679,
+      "logit": 5.740187168121338,
+      "piece": "201"
+    },
+    {
+      "rank": 10,
+      "token_id": 374,
+      "logit": 5.595123767852783,
+      "piece": " is"
+    }
+  ]
+}

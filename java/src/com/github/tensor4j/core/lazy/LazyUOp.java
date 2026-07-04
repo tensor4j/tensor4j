@@ -59,31 +59,37 @@ public final class LazyUOp {
         CONV_TRANSPOSE2D_INPUT_GRAD,
         CONV_TRANSPOSE2D_WEIGHT_GRAD,
         MAX_UNPOOL2D,
-        MAX_UNPOOL2D_VALUE_GRAD
+        MAX_UNPOOL2D_VALUE_GRAD,
+        /** Lazy Q4_0 dequant from {@link LazyGgufSlice} (tinygrad {@code ggml_data_to_tensor}). */
+        DEQUANT_Q4_0,
+        /** Lazy F32 bitcast from mmap slice (tinygrad native F32 path). */
+        MMAP_F32
     }
 
     private final Kind op;
     private final LazyUOp[] src;
     private final int[] arg;
     private final Tensor buffer;
+    private final LazyGgufSlice ggufSlice;
 
-    LazyUOp(Kind op, LazyUOp[] src, int[] arg, Tensor buffer) {
+    LazyUOp(Kind op, LazyUOp[] src, int[] arg, Tensor buffer, LazyGgufSlice ggufSlice) {
         this.op = op;
         this.src = src == null ? new LazyUOp[0] : src;
         this.arg = arg == null ? null : arg.clone();
         this.buffer = buffer;
+        this.ggufSlice = ggufSlice;
     }
 
     static LazyUOp buffer(Tensor tensor) {
         if (tensor == null) {
             throw new IllegalArgumentException("buffer tensor required");
         }
-        return LazyUOpCache.intern(Kind.BUFFER, new LazyUOp[0], null, tensor);
+        return LazyUOpCache.intern(Kind.BUFFER, new LazyUOp[0], null, tensor, null);
     }
 
     static LazyUOp unary(Kind kind, LazyUOp input, int[] arg) {
         validateUnaryKind(kind);
-        return LazyUOpCache.intern(kind, new LazyUOp[] {input}, arg, null);
+        return LazyUOpCache.intern(kind, new LazyUOp[] {input}, arg, null, null);
     }
 
     static LazyUOp binary(Kind kind, LazyUOp left, LazyUOp right) {
@@ -92,7 +98,7 @@ public final class LazyUOp {
 
     static LazyUOp binary(Kind kind, LazyUOp left, LazyUOp right, int[] arg) {
         validateBinaryKind(kind);
-        return LazyUOpCache.intern(kind, new LazyUOp[] {left, right}, arg, null);
+        return LazyUOpCache.intern(kind, new LazyUOp[] {left, right}, arg, null, null);
     }
 
     static LazyUOp ternary(Kind kind, LazyUOp first, LazyUOp second, LazyUOp third) {
@@ -100,7 +106,7 @@ public final class LazyUOp {
                 && kind != Kind.CONV_TRANSPOSE2D_INPUT_GRAD && kind != Kind.CONV_TRANSPOSE2D_WEIGHT_GRAD) {
             throw new IllegalArgumentException("unsupported ternary kind " + kind);
         }
-        return LazyUOpCache.intern(kind, new LazyUOp[] {first, second, third}, null, null);
+        return LazyUOpCache.intern(kind, new LazyUOp[] {first, second, third}, null, null, null);
     }
 
     static LazyUOp ternary(Kind kind, LazyUOp first, LazyUOp second, LazyUOp third, int[] arg) {
@@ -108,12 +114,12 @@ public final class LazyUOp {
                 && kind != Kind.CONV_TRANSPOSE2D_INPUT_GRAD && kind != Kind.CONV_TRANSPOSE2D_WEIGHT_GRAD) {
             throw new IllegalArgumentException("unsupported ternary kind with arg " + kind);
         }
-        return LazyUOpCache.intern(kind, new LazyUOp[] {first, second, third}, arg, null);
+        return LazyUOpCache.intern(kind, new LazyUOp[] {first, second, third}, arg, null, null);
     }
 
     static LazyUOp multi(Kind kind, LazyUOp[] src, int[] arg) {
         validateMultiKind(kind, src.length);
-        return LazyUOpCache.intern(kind, src, arg, null);
+        return LazyUOpCache.intern(kind, src, arg, null, null);
     }
 
     public Kind op() {
@@ -138,6 +144,19 @@ public final class LazyUOp {
 
     public Tensor buffer() {
         return buffer;
+    }
+
+    public LazyGgufSlice ggufSlice() {
+        return ggufSlice;
+    }
+
+    /** @deprecated use {@link #ggufSlice()} */
+    public LazyGgufSlice quantSlice() {
+        return ggufSlice;
+    }
+
+    public boolean isGgufLeaf() {
+        return op == Kind.DEQUANT_Q4_0 || op == Kind.MMAP_F32;
     }
 
     public boolean isMovementOnly() {
@@ -178,12 +197,12 @@ public final class LazyUOp {
             return false;
         }
         return op == lazyUOp.op && Arrays.equals(src, lazyUOp.src) && Arrays.equals(arg, lazyUOp.arg)
-                && buffer == lazyUOp.buffer;
+                && buffer == lazyUOp.buffer && ggufSlice == lazyUOp.ggufSlice;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(op, Arrays.hashCode(src), Arrays.hashCode(arg), buffer);
+        return Objects.hash(op, Arrays.hashCode(src), Arrays.hashCode(arg), buffer, ggufSlice);
     }
 
     @Override

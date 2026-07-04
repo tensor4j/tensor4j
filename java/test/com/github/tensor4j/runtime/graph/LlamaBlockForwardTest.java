@@ -45,8 +45,8 @@ class LlamaBlockForwardTest {
                 x, ones, identity, identity, identity, identity, verify, 1, 1, EPS, null, NO_ROPE, true);
         InferTensor afterAttn = GgmlOps.add(x, attn);
         InferTensor ffnIn = GgmlOps.rmsNorm(afterAttn, ones, EPS);
-        InferTensor ffnMid = GgmlOps.swiglu(GgmlOps.mulMat(ffnIn, zero), GgmlOps.mulMat(ffnIn, identity));
-        InferTensor expected = GgmlOps.add(afterAttn, GgmlOps.mulMat(ffnMid, zero));
+        InferTensor ffnMid = GgmlOps.swiglu(GgmlOps.mulMatOut(ffnIn, zero), GgmlOps.mulMatOut(ffnIn, identity));
+        InferTensor expected = GgmlOps.add(afterAttn, GgmlOps.mulMatOut(ffnMid, zero));
 
         TensorAssert.assertAllClose(expected.data(), out.data(), 1e-3f);
     }

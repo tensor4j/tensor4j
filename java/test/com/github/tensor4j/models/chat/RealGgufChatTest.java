@@ -58,6 +58,7 @@ class RealGgufChatTest {
             f32Logits = ChatModel.fromGguf(f32).forward(new int[] {1});
         }
         assertEquals(f32Logits.length, q4Logits.length);
+        com.github.tensor4j.support.TensorAssert.assertAllClose(f32Logits, q4Logits, 0.25f);
         assertEquals(ChatSampler.argmax(f32Logits), ChatSampler.argmax(q4Logits));
     }
 }

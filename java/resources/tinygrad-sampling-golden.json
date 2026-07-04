@@ -1,0 +1,88 @@
+{
+  "cases": [
+    {
+      "name": "gumbel_v3_seed42",
+      "logits": [1.0, 2.0, 0.5],
+      "temperature": 0.7,
+      "seed": 42,
+      "multinomialRoll": 0.0,
+      "topK": 0,
+      "topP": 1.0,
+      "alphaFrequency": 0.0,
+      "alphaPresence": 0.0,
+      "alphaCounts": null,
+      "gumbelMax": true,
+      "expectedToken": 1
+    },
+    {
+      "name": "gumbel_v5_seed7",
+      "logits": [1.0, 5.0, 4.0, 0.0, -10.0],
+      "temperature": 1.0,
+      "seed": 7,
+      "multinomialRoll": 0.0,
+      "topK": 0,
+      "topP": 1.0,
+      "alphaFrequency": 0.0,
+      "alphaPresence": 0.0,
+      "alphaCounts": null,
+      "gumbelMax": true,
+      "expectedToken": 1
+    },
+    {
+      "name": "gumbel_v4_low_temp",
+      "logits": [1.0, 5.0, 2.0, 0.0],
+      "temperature": 0.01,
+      "seed": 42,
+      "multinomialRoll": 0.0,
+      "topK": 0,
+      "topP": 1.0,
+      "alphaFrequency": 0.0,
+      "alphaPresence": 0.0,
+      "alphaCounts": null,
+      "gumbelMax": true,
+      "expectedToken": 1
+    },
+    {
+      "name": "llama_v4_roll_0_10",
+      "logits": [0.0, 1.0, 2.0, 3.0],
+      "temperature": 1.0,
+      "seed": 0,
+      "multinomialRoll": 0.1,
+      "topK": 0,
+      "topP": 1.0,
+      "alphaFrequency": 0.0,
+      "alphaPresence": 0.0,
+      "alphaCounts": null,
+      "gumbelMax": false,
+      "expectedToken": 1
+    },
+    {
+      "name": "llama_v5_topk2_topp09_roll_0_99",
+      "logits": [1.0, 5.0, 4.0, 0.0, -10.0],
+      "temperature": 1.0,
+      "seed": 0,
+      "multinomialRoll": 0.99,
+      "topK": 2,
+      "topP": 0.9,
+      "alphaFrequency": 0.0,
+      "alphaPresence": 0.0,
+      "alphaCounts": null,
+      "gumbelMax": false,
+      "expectedToken": 1
+    },
+    {
+      "name": "llama_alpha_fp_roll_0_50",
+      "logits": [0.0, 10.0, 10.0],
+      "temperature": 1.0,
+      "seed": 0,
+      "multinomialRoll": 0.5,
+      "topK": 0,
+      "topP": 1.0,
+      "alphaFrequency": 0.1,
+      "alphaPresence": 0.5,
+      "alphaCounts": [1, 1],
+      "gumbelMax": false,
+      "expectedToken": 2
+    }
+  ]
+}

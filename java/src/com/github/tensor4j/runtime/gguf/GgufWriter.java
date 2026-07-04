@@ -13,6 +13,7 @@ import com.github.tensor4j.runtime.ggml.GgmlLayout;
 import com.github.tensor4j.runtime.ggml.GgmlTensorShape;
 import com.github.tensor4j.runtime.ggml.GgmlType;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /** Writes GGUF metadata and full files (gguf.cpp layout). */
@@ -91,10 +92,34 @@ public final class GgufWriter {
     private static int estimateCapacity(List<GgufKvEntry> kv, List<GgufTensorInfo> tensors) {
         int size = 64;
         for (GgufKvEntry entry : kv) {
-            size += entry.key().length() + 32;
+            size += entry.key().getBytes(StandardCharsets.UTF_8).length + 16;
+            size += estimateValueSize(entry.type(), entry.value());
         }
         size += tensors.size() * 128;
         return size;
+    }
+
+    private static int estimateValueSize(GgufType type, Object value) {
+        if (type == GgufType.ARRAY) {
+            GgufArrayValue array = (GgufArrayValue) value;
+            int total = 16;
+            for (Object element : array.elements()) {
+                total += estimateScalarSize(array.elementType(), element);
+            }
+            return total;
+        }
+        return estimateScalarSize(type, value);
+    }
+
+    private static int estimateScalarSize(GgufType type, Object value) {
+        return switch (type) {
+            case STRING -> ((String) value).getBytes(StandardCharsets.UTF_8).length + 8;
+            case UINT8, INT8, BOOL -> 1;
+            case UINT16, INT16 -> 2;
+            case UINT32, INT32, FLOAT32 -> 4;
+            case UINT64, INT64, FLOAT64 -> 8;
+            case ARRAY -> throw new IllegalArgumentException("ARRAY is not a scalar");
+        };
     }
 
     /** Build a tensor info record with computed size and strides. */

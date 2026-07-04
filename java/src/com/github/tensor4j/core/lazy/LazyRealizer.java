@@ -139,6 +139,17 @@ final class LazyRealizer {
                     realizeNode(node.src(1), enableGrad, memo),
                     LazyMaxUnpool2d.poolArgFromPacked(node.arg()),
                     LazyMaxUnpool2d.valueShapeFromGradPacked(node.arg()));
+            case DEQUANT_Q4_0 -> {
+                LazyGgufSlice slice = node.ggufSlice();
+                float[] data = LazyQuantMath.dequantizeQ4_0(
+                        slice.buffer(), slice.offset(), slice.numElements());
+                yield Tensor.of(data, slice.floatShape());
+            }
+            case MMAP_F32 -> {
+                LazyGgufSlice slice = node.ggufSlice();
+                float[] data = LazyQuantMath.readF32(slice.buffer(), slice.offset(), slice.numElements());
+                yield Tensor.of(data, slice.floatShape());
+            }
             default -> throw new IllegalStateException("unsupported op " + node.op());
         };
         memo.put(node, value);

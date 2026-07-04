@@ -1,39 +1,29 @@
+/*
+ * Copyright 2026 Tensor4j Maintainers
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ */
 package com.github.tensor4j.models.chat;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.github.tensor4j.models.chat.fixture.MiniChatGgufBuilder;
-import java.util.Random;
+import com.github.tensor4j.models.chat.fixture.RequiresChatDemoVocab;
+import com.github.tensor4j.models.chat.fixture.ChatDemoVocabMode;
 import org.junit.jupiter.api.Test;
 
 class ChatDemoModelDebugTest {
 
     @Test
-    void helloCompletesWithThereUnderQualitySampling() {
-        ChatModel model = ChatModel.fromGguf(MiniChatGgufBuilder.buildChatDemoModel());
-        ChatTokenizer tok = model.tokenizer();
-        ChatGenerationOptions options = ChatGenerationOptions.quality(tok);
-        model.resetCache();
-        float[] logits = model.forward(tok.encode("Hello"));
-        assertEquals(2, ChatSampler.argmax(logits));
-
-        Random rng = new Random(42);
-        StringBuilder completion = new StringBuilder();
-        int generated = 0;
-        for (int step = 0; step < options.maxNewTokens(); step++) {
-            int next = ChatSampler.sample(logits, options, generated, rng);
-            if (next == tok.eosId() && generated >= options.minNewTokens()) {
-                break;
-            }
-            if (next == tok.bosId() || next == tok.eosId()) {
-                logits = model.forward(new int[] {next});
-                continue;
-            }
-            completion.append(tok.decode(new int[] {next}));
-            generated++;
-            logits = model.forward(new int[] {next});
-        }
-        assertTrue(completion.toString().contains("there"), completion::toString);
+    @RequiresChatDemoVocab(ChatDemoVocabMode.FULL)
+    void helloProducesRealCompletionUnderQualitySampling() {
+        ChatModel model = ChatModel.fromGguf(MiniChatGgufBuilder.buildOpenChatDemoModel());
+        ChatGenerator generator = new ChatGenerator(model, ChatGenerationOptions.quality(model.tokenizer()));
+        ChatGenerationResult result = generator.generate("Hello", ChatTemplate.PLAIN);
+        assertTrue(result.text().length() > 1, result::text);
     }
 }

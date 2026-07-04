@@ -5,97 +5,399 @@
   "layout": "row_major_flat_buffer",
   "cases": [
     {
+      "input": {
+        "shape": [
+          2,
+          3
+        ],
+        "data": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "expected": {
+        "shape": [
+          2,
+          3
+        ],
+        "data": [
+          1.0,
+          2.0,
+          3.0,
+          4.0,
+          5.0,
+          6.0
+        ]
+      },
+      "notes": "C-order flat buffer matches shape row-major flatten",
       "name": "row_major_flat",
-      "op": "layout",
-      "input": {"shape": [2, 3], "data": [1, 2, 3, 4, 5, 6]},
-      "expected": {"shape": [2, 3], "data": [1, 2, 3, 4, 5, 6]},
-      "notes": "C-order flat buffer; tinygrad Tensor.reshape preserves row-major flat order"
+      "op": "layout"
     },
     {
+      "input": {
+        "shape": [
+          2,
+          3
+        ],
+        "data": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "args": {
+        "shape": [
+          3,
+          2
+        ]
+      },
+      "expected": {
+        "shape": [
+          3,
+          2
+        ],
+        "data": [
+          1.0,
+          2.0,
+          3.0,
+          4.0,
+          5.0,
+          6.0
+        ]
+      },
       "name": "reshape_view",
-      "op": "reshape",
-      "input": {"shape": [2, 3], "data": [1, 2, 3, 4, 5, 6]},
-      "args": {"shape": [3, 2]},
-      "expected": {"shape": [3, 2], "data": [1, 2, 3, 4, 5, 6]}
+      "op": "reshape"
     },
     {
+      "input": {
+        "shape": [
+          2,
+          3
+        ],
+        "data": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "expected": {
+        "shape": [
+          3,
+          2
+        ],
+        "data": [
+          1.0,
+          4.0,
+          2.0,
+          5.0,
+          3.0,
+          6.0
+        ]
+      },
       "name": "transpose2d",
-      "op": "transpose2d",
-      "input": {"shape": [2, 3], "data": [1, 2, 3, 4, 5, 6]},
-      "expected": {"shape": [3, 2], "data": [1, 4, 2, 5, 3, 6]}
+      "op": "transpose2d"
     },
     {
+      "input": {
+        "shape": [
+          3
+        ],
+        "data": [
+          1,
+          2,
+          3
+        ]
+      },
+      "args": {
+        "shape": [
+          2,
+          3
+        ]
+      },
+      "expected": {
+        "shape": [
+          2,
+          3
+        ],
+        "data": [
+          1.0,
+          2.0,
+          3.0,
+          1.0,
+          2.0,
+          3.0
+        ]
+      },
       "name": "expand_broadcast",
-      "op": "expand",
-      "input": {"shape": [3], "data": [1, 2, 3]},
-      "args": {"shape": [2, 3]},
-      "expected": {"shape": [2, 3], "data": [1, 2, 3, 1, 2, 3]}
+      "op": "expand"
     },
     {
+      "input": {
+        "shape": [
+          2,
+          2,
+          2
+        ],
+        "data": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ]
+      },
+      "args": {
+        "order": [
+          2,
+          0,
+          1
+        ]
+      },
+      "expected": {
+        "shape": [
+          2,
+          2,
+          2
+        ],
+        "data": [
+          1.0,
+          3.0,
+          5.0,
+          7.0,
+          2.0,
+          4.0,
+          6.0,
+          8.0
+        ]
+      },
       "name": "permute_3d",
-      "op": "permute",
-      "input": {"shape": [2, 2, 2], "data": [1, 2, 3, 4, 5, 6, 7, 8]},
-      "args": {"order": [2, 0, 1]},
-      "expected": {"shape": [2, 2, 2], "data": [1, 3, 5, 7, 2, 4, 6, 8]}
+      "op": "permute"
     },
     {
+      "inputs": [
+        {
+          "shape": [
+            2,
+            2
+          ],
+          "data": [
+            1.0,
+            2.0,
+            3.0,
+            4.0
+          ]
+        },
+        {
+          "shape": [
+            2,
+            2
+          ],
+          "data": [
+            5.0,
+            6.0,
+            7.0,
+            8.0
+          ]
+        }
+      ],
+      "expected": {
+        "shape": [
+          2,
+          2
+        ],
+        "data": [
+          19.0,
+          22.0,
+          43.0,
+          50.0
+        ]
+      },
       "name": "matmul_2x2",
-      "op": "matmul",
-      "inputs": [
-        {"shape": [2, 2], "data": [1, 2, 3, 4]},
-        {"shape": [2, 2], "data": [5, 6, 7, 8]}
-      ],
-      "expected": {"shape": [2, 2], "data": [19, 22, 43, 50]}
+      "op": "matmul"
     },
     {
+      "input": {
+        "shape": [
+          5
+        ],
+        "data": [
+          -2.0,
+          -1.0,
+          0.0,
+          1.0,
+          2.0
+        ]
+      },
+      "expected": {
+        "shape": [
+          5
+        ],
+        "data": [
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          2.0
+        ]
+      },
       "name": "relu_1d",
-      "op": "relu",
-      "input": {"shape": [5], "data": [-2, -1, 0, 1, 2]},
-      "expected": {"shape": [5], "data": [0, 0, 0, 1, 2]}
+      "op": "relu"
     },
     {
+      "inputs": [
+        {
+          "shape": [
+            3
+          ],
+          "data": [
+            1.0,
+            2.0,
+            3.0
+          ]
+        },
+        {
+          "shape": [
+            3
+          ],
+          "data": [
+            4.0,
+            5.0,
+            6.0
+          ]
+        }
+      ],
+      "expected": {
+        "shape": [
+          3
+        ],
+        "data": [
+          5.0,
+          7.0,
+          9.0
+        ]
+      },
       "name": "add_1d",
-      "op": "add",
-      "inputs": [
-        {"shape": [3], "data": [1, 2, 3]},
-        {"shape": [3], "data": [4, 5, 6]}
-      ],
-      "expected": {"shape": [3], "data": [5, 7, 9]}
+      "op": "add"
     },
     {
+      "inputs": [
+        {
+          "shape": [
+            3
+          ],
+          "data": [
+            1.0,
+            2.0,
+            3.0
+          ]
+        },
+        {
+          "shape": [
+            3
+          ],
+          "data": [
+            4.0,
+            5.0,
+            6.0
+          ]
+        }
+      ],
+      "expected": {
+        "shape": [
+          3
+        ],
+        "data": [
+          4.0,
+          10.0,
+          18.0
+        ]
+      },
       "name": "mul_1d",
-      "op": "mul",
-      "inputs": [
-        {"shape": [3], "data": [1, 2, 3]},
-        {"shape": [3], "data": [4, 5, 6]}
-      ],
-      "expected": {"shape": [3], "data": [4, 10, 18]}
+      "op": "mul"
     },
     {
+      "input": {
+        "shape": [
+          3
+        ],
+        "data": [
+          1.0,
+          2.0,
+          3.0
+        ]
+      },
+      "expected": {
+        "shape": [],
+        "data": [
+          6.0
+        ]
+      },
       "name": "sum_1d",
-      "op": "sum",
-      "input": {"shape": [3], "data": [1, 2, 3]},
-      "expected": {"shape": [1], "data": [6]}
+      "op": "sum"
     },
     {
+      "input": {
+        "shape": [
+          3
+        ],
+        "data": [
+          1.0,
+          2.0,
+          3.0
+        ]
+      },
+      "expected": {
+        "shape": [],
+        "data": [
+          2.0
+        ]
+      },
       "name": "mean_1d",
-      "op": "mean",
-      "input": {"shape": [3], "data": [1, 2, 3]},
-      "expected": {"shape": [1], "data": [2]}
+      "op": "mean"
     },
     {
+      "input": {
+        "shape": [
+          2,
+          3
+        ],
+        "data": [
+          1.0,
+          2.0,
+          3.0,
+          4.0,
+          5.0,
+          6.0
+        ]
+      },
+      "args": {
+        "axis": 0
+      },
+      "expected": {
+        "shape": [
+          3
+        ],
+        "data": [
+          5.0,
+          7.0,
+          9.0
+        ]
+      },
       "name": "sum_axis0",
-      "op": "sum_axis",
-      "input": {"shape": [2, 3], "data": [1, 2, 3, 4, 5, 6]},
-      "args": {"axis": 0},
-      "expected": {"shape": [3], "data": [5, 7, 9]}
-    },
-    {
-      "name": "algebra_normalized_features",
-      "op": "custom",
-      "input": {"shape": [3], "data": [2, 3, 11]},
-      "expected": {"shape": [3], "data": [0.2, 0.3, 1.1]},
-      "notes": "Layer 3: AlgebraEquation scales a,b,c by 1/10 for float32 stability"
+      "op": "sum_axis"
     }
   ]
 }

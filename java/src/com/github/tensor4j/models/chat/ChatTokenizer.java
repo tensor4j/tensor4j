@@ -89,6 +89,33 @@ public final class ChatTokenizer {
         return tokens[id];
     }
 
+    /** Control/special ids are forwarded without appending text (tinygrad {@code apps/llm.py}). */
+    public boolean skipGeneratedPiece(int id) {
+        if (id == bosId || id == eosId) {
+            return true;
+        }
+        if (preType == BpePreType.LLAMA3 && id >= 128000) {
+            return true;
+        }
+        String piece = tokenText(id);
+        return piece.startsWith("<|") && piece.endsWith("|>");
+    }
+
+    /**
+     * Decode one generated token for the sampling loop; {@code null} when the piece should not
+     * appear in completion text (control token or non-byte BPE piece).
+     */
+    public String tryDecodePiece(int id) {
+        if (skipGeneratedPiece(id)) {
+            return null;
+        }
+        try {
+            return decode(new int[] {id});
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
+    }
+
     /** GPT-2 byte piece for llama3 fixture vocab entries (see {@link Gpt2ByteEncoder}). */
     public static String llama3VocabPiece(String text) {
         return Gpt2ByteEncoder.encode(text);
@@ -141,6 +168,16 @@ public final class ChatTokenizer {
             out.append(tokenText(id));
         }
         return out.toString();
+    }
+
+    /** {@code \n\n} after llama3 role headers (tinygrad vocab id 271 on Llama 3.2). */
+    public int[] encodeRoleSuffixNewlines() {
+        return encode("\n\n");
+    }
+
+    /** Exact vocab lookup — Llama3 {@code <|...|>} specials must not be BPE-split. */
+    public int tokenIdForText(String text) {
+        return tokenId(text);
     }
 
     private int tokenId(String text) {

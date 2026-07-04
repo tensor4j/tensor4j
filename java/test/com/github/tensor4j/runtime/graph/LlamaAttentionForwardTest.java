@@ -50,8 +50,8 @@ class LlamaAttentionForwardTest {
         KvCache cache = new KvCache(4, nHeadKv, headDim);
         InferTensor ones = InferTensor.vector(1, 1, 1, 1);
         InferTensor wq = identity(nEmbd);
-        InferTensor wk = identityRows(nEmbd, kvWidth);
-        InferTensor wv = identityRows(nEmbd, kvWidth);
+        InferTensor wk = identityRows(kvWidth, nEmbd);
+        InferTensor wv = identityRows(kvWidth, nEmbd);
         InferTensor wo = identity(nEmbd);
 
         LlamaAttentionForward.forward(

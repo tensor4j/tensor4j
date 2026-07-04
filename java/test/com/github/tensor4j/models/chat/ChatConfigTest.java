@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.github.tensor4j.runtime.infer.RopeScalingType;
 import com.github.tensor4j.models.chat.BpePreType;
-import com.github.tensor4j.support.MiniChatGgufBuilder;
+import com.github.tensor4j.models.chat.fixture.MiniChatGgufBuilder;
 import org.junit.jupiter.api.Test;
 
 class ChatConfigTest {

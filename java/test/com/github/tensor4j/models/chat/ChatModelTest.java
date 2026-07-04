@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.github.tensor4j.runtime.gguf.GgufFile;
 
-import com.github.tensor4j.support.MiniChatGgufBuilder;
+import com.github.tensor4j.models.chat.fixture.MiniChatGgufBuilder;
 
 import org.junit.jupiter.api.Test;
 

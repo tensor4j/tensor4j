@@ -89,6 +89,11 @@ public final class ChatTokenizer {
         return tokens[id];
     }
 
+    /** GPT-2 byte piece for llama3 fixture vocab entries (see {@link Gpt2ByteEncoder}). */
+    public static String llama3VocabPiece(String text) {
+        return Gpt2ByteEncoder.encode(text);
+    }
+
     /** Encode text to token ids (no automatic BOS/EOS). */
     public int[] encode(String text) {
         if (bpe == null) {

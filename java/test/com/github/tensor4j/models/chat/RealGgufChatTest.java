@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.github.tensor4j.runtime.gguf.MmappedGgufFile;
-import com.github.tensor4j.support.MiniChatGgufBuilder;
+import com.github.tensor4j.models.chat.fixture.MiniChatGgufBuilder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;

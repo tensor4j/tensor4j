@@ -28,6 +28,19 @@ mvn verify
 
 See [algebra-demo/README.md](algebra-demo/README.md).
 
+Chat GGUF demo — standalone Maven project:
+
+```bash
+cd tensor4j
+mvn install -DskipTests
+cd chat-demo
+mvn verify
+```
+
+Optional interactive REPL (30 min max): `TENSOR4J_CHAT_INTERACTIVE=1 mvn verify -DskipTests`
+
+See [chat-demo/README.md](chat-demo/README.md).
+
 ## Coding style
 
 tensor4j follows **Tinygrad-style composition without lambdas**:
@@ -59,6 +72,7 @@ tensor4j/
     ui/            Swing desktop
   java/resources/models/   bundled weights
   algebra-demo/          Failsafe integration demos (mvn verify)
+  chat-demo/             GGUF chat Failsafe demos (mvn verify)
   tools/           tinygrad export script + Java weight generator
   vendor/tinygrad/   optional local clone (gitignored)
   vendor/llama.cpp/  optional local clone — GGUF, ggml, CPU/RAM study (gitignored)

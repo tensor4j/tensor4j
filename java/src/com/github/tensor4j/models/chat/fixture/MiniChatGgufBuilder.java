@@ -7,8 +7,9 @@
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
-package com.github.tensor4j.support;
+package com.github.tensor4j.models.chat.fixture;
 
+import com.github.tensor4j.models.chat.ChatTokenizer;
 import com.github.tensor4j.runtime.ggml.GgmlQuant;
 import com.github.tensor4j.runtime.ggml.GgmlTensorShape;
 import com.github.tensor4j.runtime.ggml.GgmlType;
@@ -25,7 +26,7 @@ import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Builds tiny llama-style GGUF fixtures for chat inference tests. */
+/** Builds tiny llama-style GGUF fixtures for chat inference tests and demos. */
 public final class MiniChatGgufBuilder {
 
     public static final int N_EMBD = 32;
@@ -54,9 +55,33 @@ public final class MiniChatGgufBuilder {
         return buildModel(N_LAYER, false, true);
     }
 
-    /** Llama3 BPE tokenizer + identity weights for CI encode/forward smoke. */
+    /** Llama3 BPE tokenizer + identity weights for encode/forward smoke. */
     public static GgufFile buildLlama3BpeModel() {
         return buildModel(N_LAYER, false, false, "llama3", new String[] {"<s>", "Hello", "a", "b", "</s>"}, true);
+    }
+
+    /**
+     * Llama3 BPE + lm_head tuned so {@code Hello} completes to {@code  there!} under quality sampling.
+     */
+    public static GgufFile buildChatDemoModel() {
+        String[] tokens = llama3ChatDemoTokens(
+                "<s>", "Hello", " there", "!", " How", " can", " I", " help", "?", "</s>");
+        float[] emb = oneHotEmbeddingTable(tokens.length);
+        float[] lmHead = chainLmHead(tokens.length);
+        return buildModel(N_LAYER, false, false, "llama3", tokens, true, emb, lmHead);
+    }
+
+    private static String[] llama3ChatDemoTokens(String... pieces) {
+        String[] out = new String[pieces.length];
+        for (int i = 0; i < pieces.length; i++) {
+            String piece = pieces[i];
+            if ("<s>".equals(piece) || "</s>".equals(piece)) {
+                out[i] = piece;
+            } else {
+                out[i] = ChatTokenizer.llama3VocabPiece(piece);
+            }
+        }
+        return out;
     }
 
     public static GgufFile buildModel(int nLayer, boolean yarn, boolean q4Weights) {
@@ -70,6 +95,18 @@ public final class MiniChatGgufBuilder {
             String pre,
             String[] tokens,
             boolean ignoreMerges) {
+        return buildModel(nLayer, yarn, q4Weights, pre, tokens, ignoreMerges, null, null);
+    }
+
+    public static GgufFile buildModel(
+            int nLayer,
+            boolean yarn,
+            boolean q4Weights,
+            String pre,
+            String[] tokens,
+            boolean ignoreMerges,
+            float[] embeddingOverride,
+            float[] lmHeadOverride) {
         int nVocab = tokens.length;
         List<GgufKvEntry> kv = new ArrayList<>();
         kv.add(new GgufKvEntry("general.architecture", GgufType.STRING, "llama"));
@@ -93,9 +130,11 @@ public final class MiniChatGgufBuilder {
 
         List<GgufTensorPayload> tensors = new ArrayList<>();
         GgmlType matType = q4Weights ? GgmlType.Q4_0 : GgmlType.F32;
-        tensors.add(weight("token_embd.weight", matType, GgmlTensorShape.of(N_EMBD, nVocab), embeddingTable(nVocab)));
+        float[] emb = embeddingOverride == null ? embeddingTable(nVocab) : embeddingOverride;
+        float[] lmHead = lmHeadOverride == null ? identityMat(N_EMBD, nVocab) : lmHeadOverride;
+        tensors.add(weight("token_embd.weight", matType, GgmlTensorShape.of(N_EMBD, nVocab), emb));
         tensors.add(f32("output_norm.weight", GgmlTensorShape.of(N_EMBD), ones(N_EMBD)));
-        tensors.add(weight("output.weight", matType, GgmlTensorShape.of(N_EMBD, nVocab), identityMat(N_EMBD, nVocab)));
+        tensors.add(weight("output.weight", matType, GgmlTensorShape.of(N_EMBD, nVocab), lmHead));
 
         int kvWidth = N_HEAD_KV * (N_EMBD / N_HEAD);
         for (int layer = 0; layer < nLayer; layer++) {
@@ -195,6 +234,28 @@ public final class MiniChatGgufBuilder {
             out[i * cols + i] = 1.0f;
         }
         return out;
+    }
+
+    /** One-hot rows so lm_head can route token i → i+1 deterministically. */
+    private static float[] oneHotEmbeddingTable(int nVocab) {
+        float[] table = new float[nVocab * N_EMBD];
+        for (int v = 0; v < nVocab && v < N_EMBD; v++) {
+            table[v * N_EMBD + v] = 1.0f;
+        }
+        return table;
+    }
+
+    /** Sparse lm_head: after token id {@code i}, boost logit for {@code i + 1}. */
+    private static float[] chainLmHead(int nVocab) {
+        float[] lmHead = new float[N_EMBD * nVocab];
+        float weight = 12.0f;
+        for (int src = 1; src < nVocab - 1; src++) {
+            int dst = src + 1;
+            if (src < N_EMBD) {
+                lmHead[src * nVocab + dst] = weight;
+            }
+        }
+        return lmHead;
     }
 
     private static byte[] f32Bytes(float[] values) {

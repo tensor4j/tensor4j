@@ -57,6 +57,19 @@ mvn verify
 
 See [algebra-demo/README.md](algebra-demo/README.md).
 
+## Chat demo (standalone)
+
+`chat-demo/` exercises GGUF load, BPE tokenization, forward, and greedy generation. Optional interactive REPL when `TENSOR4J_CHAT_INTERACTIVE=1` (30 minute `@Timeout`).
+
+```bash
+cd tensor4j
+mvn install -DskipTests
+cd chat-demo
+mvn verify
+```
+
+See [chat-demo/README.md](chat-demo/README.md).
+
 ## Numeric parity with tinygrad (float layout)
 
 tinygrad stores tensors as a **single row-major float buffer** plus shape/strides metadata — same model as tensor4j `StorageBuffer` + `TensorLayout`.

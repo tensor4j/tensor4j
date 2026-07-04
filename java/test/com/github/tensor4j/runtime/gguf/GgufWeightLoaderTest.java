@@ -12,7 +12,7 @@ package com.github.tensor4j.runtime.gguf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.github.tensor4j.runtime.infer.InferTensor;
-import com.github.tensor4j.support.MiniChatGgufBuilder;
+import com.github.tensor4j.models.chat.fixture.MiniChatGgufBuilder;
 import com.github.tensor4j.support.TensorAssert;
 import org.junit.jupiter.api.Test;
 

@@ -107,11 +107,41 @@ public final class MiniChatGgufBuilder {
                 ModelShape.smoke(),
                 false,
                 false,
-                "llama-spm",
+                "llama3",
                 new String[] {
-                    "<s>", "Hello", "</s>", headerStart, "user", "assistant", headerEnd, "\n", "\n\n", "<|eot_id|>"
+                    "<|begin_of_text|>",
+                    "<s>",
+                    "Hello",
+                    "</s>",
+                    headerStart,
+                    "user",
+                    "assistant",
+                    headerEnd,
+                    "\n",
+                    "\n\n",
+                    "<|eot_id|>"
                 },
                 true);
+    }
+
+    /** Qwen2 ChatML tokens for {@link ChatTemplate#QWEN2} parity. */
+    public static GgufFile buildQwen2TemplateModel() {
+        return buildWithShape(
+                ModelShape.smoke(),
+                false,
+                false,
+                "qwen2",
+                new String[] {
+                    "<|endoftext|>",
+                    "Hello",
+                    "<|im_start|>",
+                    "user",
+                    "assistant",
+                    "\n",
+                    "<|" + "im_end" + "|>",
+                },
+                true,
+                "qwen2");
     }
 
     /** Same weights as {@link #buildLlama3BpeModel()} but omits {@code output.weight} (tied lm_head). */
@@ -189,7 +219,8 @@ public final class MiniChatGgufBuilder {
                 lmHeadOverride,
                 includeOutputWeight,
                 weightSeed,
-                zeroAttentionOutput);
+                zeroAttentionOutput,
+                "llama");
     }
 
     public static GgufFile buildModel(int nLayer, boolean yarn, boolean q4Weights) {
@@ -255,25 +286,27 @@ public final class MiniChatGgufBuilder {
             float[] lmHeadOverride,
             boolean includeOutputWeight,
             Long weightSeed,
-            boolean zeroAttentionOutput) {
+            boolean zeroAttentionOutput,
+            String architecture) {
         int nVocab = tokens.length;
+        String arch = architecture == null || architecture.isBlank() ? "llama" : architecture.trim();
         List<GgufKvEntry> kv = new ArrayList<>();
-        kv.add(new GgufKvEntry("general.architecture", GgufType.STRING, "llama"));
-        kv.add(new GgufKvEntry("llama.embedding_length", GgufType.UINT32, shape.nEmbd()));
-        kv.add(new GgufKvEntry("llama.attention.head_count", GgufType.UINT32, shape.nHead()));
-        kv.add(new GgufKvEntry("llama.attention.head_count_kv", GgufType.UINT32, shape.nHeadKv()));
-        kv.add(new GgufKvEntry("llama.block_count", GgufType.UINT32, shape.nLayer()));
-        kv.add(new GgufKvEntry("llama.context_length", GgufType.UINT32, shape.nCtx()));
-        kv.add(new GgufKvEntry("llama.vocab_size", GgufType.UINT32, nVocab));
-        kv.add(new GgufKvEntry("llama.rope.freq_base", GgufType.FLOAT32, 10000.0f));
-        kv.add(new GgufKvEntry("llama.rope.dimension_count", GgufType.UINT32, shape.ropeDim()));
-        kv.add(new GgufKvEntry("llama.attention.layer_norm_rms_epsilon", GgufType.FLOAT32, 1e-5f));
+        kv.add(new GgufKvEntry("general.architecture", GgufType.STRING, arch));
+        kv.add(new GgufKvEntry(arch + ".embedding_length", GgufType.UINT32, shape.nEmbd()));
+        kv.add(new GgufKvEntry(arch + ".attention.head_count", GgufType.UINT32, shape.nHead()));
+        kv.add(new GgufKvEntry(arch + ".attention.head_count_kv", GgufType.UINT32, shape.nHeadKv()));
+        kv.add(new GgufKvEntry(arch + ".block_count", GgufType.UINT32, shape.nLayer()));
+        kv.add(new GgufKvEntry(arch + ".context_length", GgufType.UINT32, shape.nCtx()));
+        kv.add(new GgufKvEntry(arch + ".vocab_size", GgufType.UINT32, nVocab));
+        kv.add(new GgufKvEntry(arch + ".rope.freq_base", GgufType.FLOAT32, 10000.0f));
+        kv.add(new GgufKvEntry(arch + ".rope.dimension_count", GgufType.UINT32, shape.ropeDim()));
+        kv.add(new GgufKvEntry(arch + ".attention.layer_norm_rms_epsilon", GgufType.FLOAT32, 1e-5f));
         if (yarn) {
-            kv.add(new GgufKvEntry("llama.rope.scaling.type", GgufType.STRING, "yarn"));
-            kv.add(new GgufKvEntry("llama.rope.scaling.factor", GgufType.FLOAT32, 2.0f));
-            kv.add(new GgufKvEntry("llama.rope.scaling.original_context_length", GgufType.UINT32, 4));
-            kv.add(new GgufKvEntry("llama.rope.scaling.yarn_ext_factor", GgufType.FLOAT32, 1.0f));
-            kv.add(new GgufKvEntry("llama.rope.scaling.attn_factor", GgufType.FLOAT32, 1.0f));
+            kv.add(new GgufKvEntry(arch + ".rope.scaling.type", GgufType.STRING, "yarn"));
+            kv.add(new GgufKvEntry(arch + ".rope.scaling.factor", GgufType.FLOAT32, 2.0f));
+            kv.add(new GgufKvEntry(arch + ".rope.scaling.original_context_length", GgufType.UINT32, 4));
+            kv.add(new GgufKvEntry(arch + ".rope.scaling.yarn_ext_factor", GgufType.FLOAT32, 1.0f));
+            kv.add(new GgufKvEntry(arch + ".rope.scaling.attn_factor", GgufType.FLOAT32, 1.0f));
         }
         addTokenizerKv(kv, pre, tokens, merges, tokenTypes, ignoreMerges, bosId, eosId);
 
@@ -325,9 +358,20 @@ public final class MiniChatGgufBuilder {
             String pre,
             String[] tokens,
             boolean ignoreMerges) {
+        return buildWithShape(shape, yarn, q4Weights, pre, tokens, ignoreMerges, "llama");
+    }
+
+    private static GgufFile buildWithShape(
+            ModelShape shape,
+            boolean yarn,
+            boolean q4Weights,
+            String pre,
+            String[] tokens,
+            boolean ignoreMerges,
+            String architecture) {
         return buildWithShape(
                 shape, yarn, q4Weights, pre, tokens, new String[0], null, ignoreMerges, 0, tokens.length - 1,
-                null, null, true, null, false);
+                null, null, true, null, false, architecture);
     }
 
     private static GgufFile buildWithShape(
@@ -340,8 +384,22 @@ public final class MiniChatGgufBuilder {
             float[] embeddingOverride,
             float[] lmHeadOverride) {
         return buildWithShape(
+                shape, yarn, q4Weights, pre, tokens, ignoreMerges, "llama", embeddingOverride, lmHeadOverride);
+    }
+
+    private static GgufFile buildWithShape(
+            ModelShape shape,
+            boolean yarn,
+            boolean q4Weights,
+            String pre,
+            String[] tokens,
+            boolean ignoreMerges,
+            String architecture,
+            float[] embeddingOverride,
+            float[] lmHeadOverride) {
+        return buildWithShape(
                 shape, yarn, q4Weights, pre, tokens, new String[0], null, ignoreMerges, 0, tokens.length - 1,
-                embeddingOverride, lmHeadOverride, true, null, false);
+                embeddingOverride, lmHeadOverride, true, null, false, architecture);
     }
 
     private static GgufFile buildWithShape(
@@ -355,8 +413,24 @@ public final class MiniChatGgufBuilder {
             float[] lmHeadOverride,
             boolean includeOutputWeight) {
         return buildWithShape(
+                shape, yarn, q4Weights, pre, tokens, ignoreMerges, "llama",
+                embeddingOverride, lmHeadOverride, includeOutputWeight);
+    }
+
+    private static GgufFile buildWithShape(
+            ModelShape shape,
+            boolean yarn,
+            boolean q4Weights,
+            String pre,
+            String[] tokens,
+            boolean ignoreMerges,
+            String architecture,
+            float[] embeddingOverride,
+            float[] lmHeadOverride,
+            boolean includeOutputWeight) {
+        return buildWithShape(
                 shape, yarn, q4Weights, pre, tokens, new String[0], null, ignoreMerges, 0, tokens.length - 1,
-                embeddingOverride, lmHeadOverride, includeOutputWeight, null, false);
+                embeddingOverride, lmHeadOverride, includeOutputWeight, null, false, architecture);
     }
 
     private static GgufFile buildWithShape(
@@ -371,8 +445,25 @@ public final class MiniChatGgufBuilder {
             boolean includeOutputWeight,
             Long weightSeed) {
         return buildWithShape(
+                shape, yarn, q4Weights, pre, tokens, ignoreMerges, "llama",
+                embeddingOverride, lmHeadOverride, includeOutputWeight, weightSeed);
+    }
+
+    private static GgufFile buildWithShape(
+            ModelShape shape,
+            boolean yarn,
+            boolean q4Weights,
+            String pre,
+            String[] tokens,
+            boolean ignoreMerges,
+            String architecture,
+            float[] embeddingOverride,
+            float[] lmHeadOverride,
+            boolean includeOutputWeight,
+            Long weightSeed) {
+        return buildWithShape(
                 shape, yarn, q4Weights, pre, tokens, new String[0], null, ignoreMerges, 0, tokens.length - 1,
-                embeddingOverride, lmHeadOverride, includeOutputWeight, weightSeed, false);
+                embeddingOverride, lmHeadOverride, includeOutputWeight, weightSeed, false, architecture);
     }
 
     private record ModelShape(int nEmbd, int nHead, int nHeadKv, int nLayer, int nCtx, int ropeDim) {

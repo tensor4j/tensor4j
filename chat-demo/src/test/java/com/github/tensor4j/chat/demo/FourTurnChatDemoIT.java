@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.github.tensor4j.models.chat.ChatGenerationOptions;
 import com.github.tensor4j.models.chat.ChatGenerationResult;
 import com.github.tensor4j.models.chat.ChatGenerator;
+import com.github.tensor4j.models.chat.ChatHistoryMode;
 import com.github.tensor4j.models.chat.ChatModel;
 import com.github.tensor4j.models.chat.ChatTemplate;
 import com.github.tensor4j.models.chat.fixture.MiniChatGgufBuilder.ChatDemo;
@@ -35,7 +36,7 @@ class FourTurnChatDemoIT {
         assertTrue(model.config().nEmbd() == ChatDemo.N_EMBD);
         assertTrue(model.config().nVocab() == ChatDemo.FULL_VOCAB);
 
-        ChatGenerator generator = new ChatGenerator(model, options);
+        ChatGenerator generator = new ChatGenerator(model, options, ChatHistoryMode.LEGACY);
         int lastReuse = 0;
         for (int turn = 1; turn <= ChatDemo.TURN_COUNT; turn++) {
             String user = "Hello";

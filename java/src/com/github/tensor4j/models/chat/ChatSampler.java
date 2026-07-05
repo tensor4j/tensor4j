@@ -56,9 +56,10 @@ public final class ChatSampler {
             ChatSamplingRng samplingRng) {
         float[] work = logits.clone();
         sanitizeNaNs(work);
-        if (tokensGenerated < options.minNewTokens()) {
+        if (tokensGenerated < options.minNewTokens() && InferCompatMode.fromEnvironment().maskEndTokensDuringMinNewTokens()) {
             maskToken(work, options.bosId());
             maskToken(work, options.eosId());
+            maskToken(work, options.eotId());
         }
         if (state != null) {
             state.applyAlphaPenalties(work, options.alphaFrequency(), options.alphaPresence());

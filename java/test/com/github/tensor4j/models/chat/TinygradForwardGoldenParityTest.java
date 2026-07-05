@@ -46,6 +46,9 @@ class TinygradForwardGoldenParityTest {
         if ("llama3_template".equals(fixture)) {
             return ChatModel.fromGguf(MiniChatGgufBuilder.buildLlama3TemplateModel());
         }
+        if ("qwen2_template".equals(fixture)) {
+            return ChatModel.fromGguf(MiniChatGgufBuilder.buildQwen2TemplateModel());
+        }
         throw new IllegalArgumentException("unknown fixture " + fixture);
     }
 
@@ -55,6 +58,9 @@ class TinygradForwardGoldenParityTest {
         }
         if ("llama3_template_user_hello".equals(golden.name())) {
             return ChatTemplate.LLAMA3.encodeUser(model.tokenizer(), "Hello");
+        }
+        if ("qwen2_template_user_hello".equals(golden.name())) {
+            return ChatTemplate.QWEN2.encodePromptForGeneration(model.tokenizer(), "Hello");
         }
         throw new IllegalArgumentException("no tokens for " + golden.name());
     }

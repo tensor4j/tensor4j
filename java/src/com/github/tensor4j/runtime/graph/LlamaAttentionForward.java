@@ -38,6 +38,28 @@ public final class LlamaAttentionForward {
             int[] positions,
             RopeConfig rope,
             boolean causal) {
+        return forward(
+                x, attnNormWeight, wq, wk, wv, wo, null, null, null,
+                cache, nHead, nHeadKv, rmsEps, positions, rope, causal);
+    }
+
+    public static InferTensor forward(
+            InferTensor x,
+            InferTensor attnNormWeight,
+            InferTensor wq,
+            InferTensor wk,
+            InferTensor wv,
+            InferTensor wo,
+            InferTensor qBias,
+            InferTensor kBias,
+            InferTensor vBias,
+            KvCacheStore cache,
+            int nHead,
+            int nHeadKv,
+            float rmsEps,
+            int[] positions,
+            RopeConfig rope,
+            boolean causal) {
         validateHeads(nHead, nHeadKv);
         int nEmbd = x.cols();
         int headDim = nEmbd / nHead;
@@ -48,6 +70,15 @@ public final class LlamaAttentionForward {
         InferTensor q = GgmlOps.mulMatOut(normed, wq);
         InferTensor kCur = GgmlOps.mulMatOut(normed, wk);
         InferTensor vCur = GgmlOps.mulMatOut(normed, wv);
+        if (qBias != null) {
+            q = GgmlOps.addRowBias(q, qBias);
+        }
+        if (kBias != null) {
+            kCur = GgmlOps.addRowBias(kCur, kBias);
+        }
+        if (vBias != null) {
+            vCur = GgmlOps.addRowBias(vCur, vBias);
+        }
 
         if (positions == null) {
             positions = defaultPositions(x.rows(), cache.nKv());

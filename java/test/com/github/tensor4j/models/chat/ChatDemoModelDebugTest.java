@@ -22,7 +22,7 @@ class ChatDemoModelDebugTest {
     @RequiresChatDemoVocab(ChatDemoVocabMode.FULL)
     void helloProducesRealCompletionUnderQualitySampling() {
         ChatModel model = ChatModel.fromGguf(MiniChatGgufBuilder.buildOpenChatDemoModel());
-        ChatGenerator generator = new ChatGenerator(model, ChatGenerationOptions.quality(model.tokenizer()));
+        ChatGenerator generator = new ChatGenerator(model, ChatGenerationOptions.quality(model.tokenizer()), ChatHistoryMode.LEGACY);
         ChatGenerationResult result = generator.generate("Hello", ChatTemplate.PLAIN);
         assertTrue(result.text().length() > 1, result::text);
     }

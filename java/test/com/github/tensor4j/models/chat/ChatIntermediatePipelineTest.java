@@ -113,7 +113,7 @@ class ChatIntermediatePipelineTest {
         assertEquals(eos, next);
         assertTrue(TinygradGenerateReference.shouldStop(next, eos, 0, 0));
 
-        ChatGenerator generator = new ChatGenerator(model, ChatGenerationOptions.greedy(model.tokenizer(), 4));
+        ChatGenerator generator = new ChatGenerator(model, ChatGenerationOptions.greedy(model.tokenizer(), 4), ChatHistoryMode.LEGACY);
         var result = generator.generate("ab", ChatTemplate.PLAIN);
         assertEquals(0, result.tokenCount());
     }
@@ -140,7 +140,7 @@ class ChatIntermediatePipelineTest {
         assertEquals(42, ChatSampler.argmax(chain.forward(new int[] {41})),
                 "incremental decode after prefill on 40 should route 41→42");
 
-        ChatGenerator generator = new ChatGenerator(chain, ChatGenerationOptions.greedy(chain.tokenizer(), 5));
+        ChatGenerator generator = new ChatGenerator(chain, ChatGenerationOptions.greedy(chain.tokenizer(), 5), ChatHistoryMode.LEGACY);
         assertArrayEquals(new int[] {41, 42, 43, 44, 45},
                 generator.generate(new int[] {40}).generatedTokenIds());
 

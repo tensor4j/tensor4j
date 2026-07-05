@@ -11,6 +11,8 @@ package com.github.tensor4j.chat.demo;
 
 import com.github.tensor4j.models.chat.ChatGenerationOptions;
 import com.github.tensor4j.models.chat.ChatGenerationResult;
+import com.github.tensor4j.models.chat.ChatGenerationStep;
+import com.github.tensor4j.models.chat.ChatGenerationStopReason;
 import com.github.tensor4j.models.chat.ChatGenerator;
 import com.github.tensor4j.models.chat.ChatTemplate;
 import com.github.tensor4j.models.chat.ChatTokenizer;
@@ -95,6 +97,7 @@ final class ChatSessionLogger implements AutoCloseable {
             int[] sessionAfter = generator.sessionTokenIds();
             int kvAfter = generator.kvLength();
             int eos = tokenizer.eosId();
+            int eot = tokenizer.eotId();
 
             markdown.write("## User\n\n");
             markdown.write(userText.isBlank() ? "_(empty)_" : userText);
@@ -106,9 +109,12 @@ final class ChatSessionLogger implements AutoCloseable {
             markdown.write("_");
             markdown.write(String.format(
                     Locale.US,
-                    "%d new tokens, %d prefix reused, session %d tokens, kv %d",
+                    "%d new tokens, stop=%s%s, %d left, %s, session %d tokens, kv %d",
                     result.tokenCount(),
-                    result.prefixReuseTokens(),
+                    result.stopReason().name().toLowerCase(Locale.ROOT),
+                    result.stopTokenId() >= 0 ? " id=" + result.stopTokenId() : "",
+                    result.tokensRemaining(),
+                    result.prefixReuseTokens() == 0 ? "delta-only" : result.prefixReuseTokens() + " prefix reused",
                     sessionAfter.length,
                     kvAfter));
             markdown.write("_\n\n");
@@ -146,7 +152,14 @@ final class ChatSessionLogger implements AutoCloseable {
             audit.write(Integer.toString(kvAfter));
             audit.write(" prefix_reused=");
             audit.write(Integer.toString(result.prefixReuseTokens()));
+            audit.write(" stop_reason=");
+            audit.write(result.stopReason().name());
+            audit.write(" stop_token_id=");
+            audit.write(Integer.toString(result.stopTokenId()));
+            audit.write(" tokens_remaining=");
+            audit.write(Integer.toString(result.tokensRemaining()));
             audit.write('\n');
+            writeGenerationSteps(audit, result);
             audit.write("generated_ids len=");
             audit.write(Integer.toString(result.generatedTokenIds().length));
             audit.write(formatIds(result.generatedTokenIds()));
@@ -160,6 +173,9 @@ final class ChatSessionLogger implements AutoCloseable {
             audit.write(Integer.toString(sessionAfter.length));
             audit.write(" ends_eot=");
             audit.write(Boolean.toString(
+                    sessionAfter.length > 0 && sessionAfter[sessionAfter.length - 1] == eot));
+            audit.write(" ends_eos=");
+            audit.write(Boolean.toString(
                     sessionAfter.length > 0 && sessionAfter[sessionAfter.length - 1] == eos));
             audit.write(formatIds(sessionAfter));
             audit.write('\n');
@@ -172,6 +188,8 @@ final class ChatSessionLogger implements AutoCloseable {
             audit.write('\n');
             audit.write("kv_equals_session_len: ");
             audit.write(Boolean.toString(kvAfter == sessionAfter.length));
+            audit.write(" kv_equals_template_prev: ");
+            audit.write(Boolean.toString(kvAfter == generator.templatePrevTokens()));
             audit.write('\n');
             audit.write("prompt_extends_session_before: ");
             audit.write(Boolean.toString(prefixMatches(sessionTokensBefore, promptIds)));
@@ -248,6 +266,8 @@ final class ChatSessionLogger implements AutoCloseable {
         audit.write(Integer.toString(options.bosId()));
         audit.write(" eos_id=");
         audit.write(Integer.toString(options.eosId()));
+        audit.write(" eot_id=");
+        audit.write(Integer.toString(options.eotId()));
         audit.write(" kv_reuse=");
         audit.write(Boolean.toString(ChatGenerator.kvReuseEnabled()));
         audit.write('\n');
@@ -266,6 +286,27 @@ final class ChatSessionLogger implements AutoCloseable {
         return true;
     }
 
+    private void writeGenerationSteps(BufferedWriter out, ChatGenerationResult result) throws IOException {
+        ChatGenerationStep[] steps = result.steps();
+        if (steps.length == 0) {
+            return;
+        }
+        out.write("generation_steps:\n");
+        for (ChatGenerationStep step : steps) {
+            out.write("  step ");
+            out.write(Integer.toString(step.step()));
+            out.write(": id=");
+            out.write(Integer.toString(step.tokenId()));
+            out.write(" visible=");
+            out.write(Boolean.toString(step.visible()));
+            out.write(" eog=");
+            out.write(Boolean.toString(step.endOfGeneration()));
+            out.write(" text=");
+            out.write(step.piece() == null ? "(none)" : describeToken(step.tokenId()));
+            out.write('\n');
+        }
+    }
+
     private void writeTokenLegend(BufferedWriter out, int[] ids) throws IOException {
         out.write("forwarded_token_map:\n");
         for (int id : ids) {
@@ -282,6 +323,9 @@ final class ChatSessionLogger implements AutoCloseable {
             return "<|bos|>";
         }
         if (id == tokenizer.eosId()) {
+            return "<|eos|>";
+        }
+        if (id == tokenizer.eotId()) {
             return "<|eot_id|>";
         }
         if (tokenizer.skipGeneratedPiece(id)) {

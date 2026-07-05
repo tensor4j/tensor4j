@@ -17,6 +17,7 @@ import com.github.tensor4j.models.chat.BpePreType;
 import com.github.tensor4j.models.chat.ChatGenerationOptions;
 import com.github.tensor4j.models.chat.ChatGenerationResult;
 import com.github.tensor4j.models.chat.ChatGenerator;
+import com.github.tensor4j.models.chat.ChatHistoryMode;
 import com.github.tensor4j.models.chat.ChatModel;
 import com.github.tensor4j.models.chat.ChatTemplate;
 import com.github.tensor4j.models.chat.fixture.MiniChatGgufBuilder.ChatDemo;
@@ -67,7 +68,8 @@ class ChatDemoVocabTest {
         assertEquals(ChatDemo.FULL_VOCAB, model.config().nVocab());
         assertTrue(model.tokenizer().encode("Hello").length > 0);
 
-        ChatGenerationResult result = new ChatGenerator(model, ChatGenerationOptions.greedy(model.tokenizer(), 16))
+        ChatGenerationResult result = new ChatGenerator(
+                        model, ChatGenerationOptions.greedy(model.tokenizer(), 16), ChatHistoryMode.LEGACY)
                 .generate("Hello", ChatTemplate.PLAIN);
         assertTrue(result.text().length() > 1, result::text);
     }

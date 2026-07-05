@@ -70,6 +70,24 @@ public final class GgmlOps {
         return InferTensor.of(result, x.rows(), out);
     }
 
+    /** Add a row bias broadcast across tokens: {@code y[i,j] += b[j]} (Qwen {@code attn_q.bias}). */
+    public static InferTensor addRowBias(InferTensor x, InferTensor bias) {
+        if (bias.rows() != 1 || bias.cols() != x.cols()) {
+            throw new IllegalArgumentException("addRowBias expected 1x" + x.cols() + " bias but was "
+                    + bias.rows() + "x" + bias.cols());
+        }
+        float[] out = x.data().clone();
+        float[] bd = bias.data();
+        int cols = x.cols();
+        for (int row = 0; row < x.rows(); row++) {
+            int base = row * cols;
+            for (int j = 0; j < cols; j++) {
+                out[base + j] += bd[j];
+            }
+        }
+        return InferTensor.of(out, x.rows(), cols);
+    }
+
     public static InferTensor add(InferTensor a, InferTensor b) {
         requireSameShape(a, b);
         float[] out = new float[a.data().length];

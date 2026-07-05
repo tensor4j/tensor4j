@@ -29,7 +29,8 @@ public record ChatConfig(
         float ropeScaleFactor,
         int ropeOrigCtx,
         float yarnExtFactor,
-        float yarnAttnFactor) {
+        float yarnAttnFactor,
+        String architecture) {
 
     public int headDim() {
         return nEmbd / nHead;
@@ -66,23 +67,30 @@ public record ChatConfig(
     }
 
     public static ChatConfig fromGguf(GgufHeader header) {
-        int nEmbd = requireInt(header, "llama.embedding_length");
-        int nHead = requireInt(header, "llama.attention.head_count");
-        int nHeadKv = intKv(header, "llama.attention.head_count_kv", nHead);
-        int nLayer = requireInt(header, "llama.block_count");
-        int nCtx = intKv(header, "llama.context_length", 512);
-        int nVocab = intKv(header, "llama.vocab_size", guessVocab(header));
-        float rmsEps = floatKv(header, "llama.attention.layer_norm_rms_epsilon", 1e-5f);
-        float ropeBase = floatKv(header, "llama.rope.freq_base", 10000.0f);
-        int ropeDim = intKv(header, "llama.rope.dimension_count", nEmbd / nHead);
-        RopeScalingType scaling = parseScaling(stringKv(header, "llama.rope.scaling.type", "none"));
-        float scaleFactor = floatKv(header, "llama.rope.scaling.factor", 0.0f);
-        int origCtx = intKv(header, "llama.rope.scaling.original_context_length", nCtx);
-        float yarnExt = floatKv(header, "llama.rope.scaling.yarn_ext_factor", 1.0f);
-        float yarnAttn = floatKv(header, "llama.rope.scaling.attn_factor", 1.0f);
+        String arch = stringKv(header, "general.architecture", "llama");
+        return fromGguf(header, arch);
+    }
+
+    /** Read hparams using {@code general.architecture} prefix ({@code llama}, {@code qwen2}, …). */
+    static ChatConfig fromGguf(GgufHeader header, String architecture) {
+        String prefix = architecture == null || architecture.isBlank() ? "llama" : architecture.trim();
+        int nEmbd = requireInt(header, prefix + ".embedding_length");
+        int nHead = requireInt(header, prefix + ".attention.head_count");
+        int nHeadKv = intKv(header, prefix + ".attention.head_count_kv", nHead);
+        int nLayer = requireInt(header, prefix + ".block_count");
+        int nCtx = intKv(header, prefix + ".context_length", 512);
+        int nVocab = intKv(header, prefix + ".vocab_size", guessVocab(header));
+        float rmsEps = floatKv(header, prefix + ".attention.layer_norm_rms_epsilon", 1e-5f);
+        float ropeBase = floatKv(header, prefix + ".rope.freq_base", 10000.0f);
+        int ropeDim = intKv(header, prefix + ".rope.dimension_count", nEmbd / nHead);
+        RopeScalingType scaling = parseScaling(stringKv(header, prefix + ".rope.scaling.type", "none"));
+        float scaleFactor = floatKv(header, prefix + ".rope.scaling.factor", 0.0f);
+        int origCtx = intKv(header, prefix + ".rope.scaling.original_context_length", nCtx);
+        float yarnExt = floatKv(header, prefix + ".rope.scaling.yarn_ext_factor", 1.0f);
+        float yarnAttn = floatKv(header, prefix + ".rope.scaling.attn_factor", 1.0f);
         return new ChatConfig(
                 nVocab, nEmbd, nHead, nHeadKv, nLayer, nCtx, rmsEps, ropeBase,
-                ropeDim, scaling, scaleFactor, origCtx, yarnExt, yarnAttn);
+                ropeDim, scaling, scaleFactor, origCtx, yarnExt, yarnAttn, prefix);
     }
 
     /** Cap ring KV allocation (GGUF {@code llama.context_length} is often 128k+). */
@@ -96,7 +104,12 @@ public record ChatConfig(
         }
         return new ChatConfig(
                 nVocab, nEmbd, nHead, nHeadKv, nLayer, capped, rmsEps, ropeBase,
-                ropeDim, ropeScaling, ropeScaleFactor, ropeOrigCtx, yarnExtFactor, yarnAttnFactor);
+                ropeDim, ropeScaling, ropeScaleFactor, ropeOrigCtx, yarnExtFactor, yarnAttnFactor,
+                architecture);
+    }
+
+    public boolean isQwen2Family() {
+        return "qwen2".equals(architecture);
     }
 
     private static RopeScalingType parseScaling(String value) {

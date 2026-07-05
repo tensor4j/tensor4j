@@ -49,7 +49,9 @@ class OpenEndedChatDemoTest {
         ChatGenerationOptions greedy = ChatGenerationOptions.greedy(chain.tokenizer(), 24);
 
         String chainText = new ChatGenerator(chain, greedy).generate(new int[] {40}).text();
-        String openText = new ChatGenerator(open, greedy).generate("Hello", ChatTemplate.PLAIN).text();
+        String openText = new ChatGenerator(open, greedy, ChatHistoryMode.LEGACY)
+                .generate("Hello", ChatTemplate.PLAIN)
+                .text();
 
         assertTrue(chainText.length() > 1, chainText);
         assertTrue(openText.length() > 1, openText);
@@ -79,8 +81,8 @@ class OpenEndedChatDemoTest {
         ChatModel a = ChatModel.fromGguf(MiniChatGgufBuilder.buildOpenChatDemoModel());
         ChatModel b = ChatModel.fromGguf(MiniChatGgufBuilder.buildOpenChatDemoModel());
         ChatGenerationOptions options = ChatGenerationOptions.quality(a.tokenizer(), ChatSamplingRngMode.LEGACY);
-        String first = new ChatGenerator(a, options).generate("Hello", ChatTemplate.PLAIN).text();
-        String second = new ChatGenerator(b, options).generate("Hello", ChatTemplate.PLAIN).text();
+        String first = new ChatGenerator(a, options, ChatHistoryMode.LEGACY).generate("Hello", ChatTemplate.PLAIN).text();
+        String second = new ChatGenerator(b, options, ChatHistoryMode.LEGACY).generate("Hello", ChatTemplate.PLAIN).text();
         assertEquals(first, second);
         assertTrue(first.length() > 1);
     }

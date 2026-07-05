@@ -32,6 +32,7 @@ class ChatSamplerTest {
                 42L,
                 -1,
                 -1,
+                -1,
                 alphaF,
                 alphaP,
                 gumbel,
@@ -43,7 +44,7 @@ class ChatSamplerTest {
     void greedyModePicksArgmaxRegardlessOfTopK() {
         float[] logits = new float[] {1f, 5f, 4f, 0f};
         ChatGenerationOptions options = new ChatGenerationOptions(
-                ChatGenerationMode.GREEDY, 0f, 0.5f, 2, 0, 8, 0L, -1, -1, 0f, 0f, false, 32, ChatSamplingRngMode.LEGACY);
+                ChatGenerationMode.GREEDY, 0f, 0.5f, 2, 0, 8, 0L, -1, -1, -1, 0f, 0f, false, 32, ChatSamplingRngMode.LEGACY);
         assertEquals(1, ChatSampler.sample(logits, options, 0, new Random(1)));
     }
 
@@ -55,10 +56,20 @@ class ChatSamplerTest {
     }
 
     @Test
+    void qualityModeSuppressesEotUntilMinTokens() {
+        float[] logits = new float[] {1f, 2f, 3f, 100f};
+        ChatGenerationOptions options = new ChatGenerationOptions(
+                ChatGenerationMode.QUALITY, 0f, 1f, 0, 2, 8, 0L, 0, 3, 4, 0f, 0f, false, 32, ChatSamplingRngMode.LEGACY);
+        int picked = ChatSampler.sample(logits, options, 0, new Random(1));
+        assertNotEquals(4, picked);
+        assertEquals(2, picked);
+    }
+
+    @Test
     void qualityModeSuppressesEosUntilMinTokens() {
         float[] logits = new float[] {1f, 2f, 3f, 100f};
         ChatGenerationOptions options = new ChatGenerationOptions(
-                ChatGenerationMode.QUALITY, 0f, 1f, 0, 2, 8, 0L, 0, 3, 0f, 0f, false, 32, ChatSamplingRngMode.LEGACY);
+                ChatGenerationMode.QUALITY, 0f, 1f, 0, 2, 8, 0L, 0, 3, 4, 0f, 0f, false, 32, ChatSamplingRngMode.LEGACY);
         int picked = ChatSampler.sample(logits, options, 0, new Random(1));
         assertNotEquals(3, picked);
         assertEquals(2, picked);

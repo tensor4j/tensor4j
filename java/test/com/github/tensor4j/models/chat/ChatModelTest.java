@@ -142,7 +142,9 @@ class ChatModelTest {
 
                 base.yarnExtFactor(),
 
-                base.yarnAttnFactor());
+                base.yarnAttnFactor(),
+
+                base.architecture());
 
         ChatTokenizer tokenizer = ChatTokenizer.fromGguf(file.header());
 

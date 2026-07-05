@@ -33,6 +33,7 @@ class ChatGeneratorTest {
                 0L,
                 tokenizer.bosId(),
                 tokenizer.eosId(),
+                tokenizer.eotId(),
                 0f,
                 0f,
                 false,
@@ -89,8 +90,8 @@ class ChatGeneratorTest {
         ChatModel a = ChatModel.fromGguf(MiniChatGgufBuilder.buildChatDemoModel());
         ChatModel b = ChatModel.fromGguf(MiniChatGgufBuilder.buildChatDemoModel());
         ChatGenerationOptions options = ChatGenerationOptions.quality(a.tokenizer(), ChatSamplingRngMode.LEGACY);
-        ChatGenerator genA = new ChatGenerator(a, options);
-        ChatGenerator genB = new ChatGenerator(b, options);
+        ChatGenerator genA = new ChatGenerator(a, options, ChatHistoryMode.LEGACY);
+        ChatGenerator genB = new ChatGenerator(b, options, ChatHistoryMode.LEGACY);
         String first = genA.generate("Hello", ChatTemplate.PLAIN).text();
         String second = genB.generate("Hello", ChatTemplate.PLAIN).text();
         assertEquals(first, second);
@@ -109,7 +110,7 @@ class ChatGeneratorTest {
     @RequiresChatDemoVocab(ChatDemoVocabMode.PRUNED)
     void secureRngGeneratesNonEmptyCompletion() {
         ChatModel model = ChatModel.fromGguf(MiniChatGgufBuilder.buildChatDemoModel());
-        ChatGenerator generator = new ChatGenerator(model, ChatGenerationOptions.quality(model.tokenizer()));
+        ChatGenerator generator = new ChatGenerator(model, ChatGenerationOptions.quality(model.tokenizer()), ChatHistoryMode.LEGACY);
         ChatGenerationResult result = generator.generate("Hello", ChatTemplate.PLAIN);
         assertTrue(result.text().length() > 1, result::text);
     }
@@ -117,10 +118,31 @@ class ChatGeneratorTest {
     @Test
     void llama3SessionClosesEachTurnWithEot() {
         ChatModel model = ChatModel.fromGguf(MiniChatGgufBuilder.buildLlama3TemplateModel());
-        ChatGenerator generator = new ChatGenerator(model, ChatGenerationOptions.greedy(model.tokenizer(), 8));
+        ChatGenerator generator = new ChatGenerator(model, ChatGenerationOptions.greedy(model.tokenizer(), 8), ChatHistoryMode.LEGACY);
         generator.continueConversation("Hello", ChatTemplate.LLAMA3);
         int[] session = generator.sessionTokenIdsForTests();
         assertEquals(model.tokenizer().eosId(), session[session.length - 1]);
+    }
+
+    @Test
+    void qwen2SessionClosesEachTurnWithEot() {
+        ChatModel model = ChatModel.fromGguf(MiniChatGgufBuilder.buildQwen2TemplateModel());
+        ChatGenerator generator = new ChatGenerator(model, ChatGenerationOptions.greedy(model.tokenizer(), 8), ChatHistoryMode.LEGACY);
+        generator.continueConversation("Hello", ChatTemplate.QWEN2);
+        int[] session = generator.sessionTokenIdsForTests();
+        int eos = model.tokenizer().eosId();
+        assertTrue(
+                lastIndexOf(session, eos) >= session.length - 8,
+                "session should end with eos (qwen adds newline after)");
+    }
+
+    private static int lastIndexOf(int[] array, int value) {
+        for (int i = array.length - 1; i >= 0; i--) {
+            if (array[i] == value) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     @Test
@@ -128,7 +150,7 @@ class ChatGeneratorTest {
     void multiTurnReusesKvPrefix() {
         ChatModel model = ChatModel.fromGguf(MiniChatGgufBuilder.buildChatDemoModel());
         ChatGenerationOptions options = ChatGenerationOptions.quality(model.tokenizer(), ChatSamplingRngMode.LEGACY);
-        ChatGenerator generator = new ChatGenerator(model, options);
+        ChatGenerator generator = new ChatGenerator(model, options, ChatHistoryMode.LEGACY);
 
         ChatGenerationResult first = generator.continueConversation("Hello", ChatTemplate.PLAIN);
         assertTrue(first.text().length() > 1, first::text);
@@ -137,6 +159,24 @@ class ChatGeneratorTest {
         ChatGenerationResult second = generator.continueConversation("Hello", ChatTemplate.PLAIN);
         assertTrue(second.prefixReuseTokens() > 0, "second turn should reuse prior KV prefix");
         assertTrue(second.text().length() > 1, second::text);
+    }
+
+    @Test
+    void llamaHistoryModeDeltaTurnDoesNotReportPrefixReuse() {
+        ChatModel model = ChatModel.fromGguf(MiniChatGgufBuilder.buildLlama3TemplateModel());
+        ChatGenerationOptions options = ChatGenerationOptions.greedy(model.tokenizer(), 4);
+        ChatGenerator generator = new ChatGenerator(model, options, ChatHistoryMode.LLAMA);
+
+        ChatGenerationResult first = generator.continueConversation("Hello", ChatTemplate.LLAMA3);
+        assertEquals(0, first.prefixReuseTokens());
+        int sessionAfterFirst = generator.sessionTokenIds().length;
+
+        ChatGenerationResult second = generator.continueConversation("Again", ChatTemplate.LLAMA3);
+        assertEquals(0, second.prefixReuseTokens(), "llama mode tokenizes delta only");
+        assertTrue(
+                generator.sessionTokenIds().length > sessionAfterFirst,
+                "second turn should extend closed template token ids");
+        assertEquals(4, generator.messages().size());
     }
 
     @Test
@@ -179,7 +219,7 @@ class ChatGeneratorTest {
     void kvCacheInvalidatesOnDivergentPrefix() {
         ChatModel model = ChatModel.fromGguf(MiniChatGgufBuilder.buildIdentityModel());
         ChatGenerationOptions options = greedyWithPrefillChunk(model.tokenizer(), 1, 32);
-        ChatGenerator generator = new ChatGenerator(model, options);
+        ChatGenerator generator = new ChatGenerator(model, options, ChatHistoryMode.LEGACY);
 
         generator.generateWithKvReuse(new int[] {1, 2, 1, 2, 1});
         assertTrue(model.kvLength() > 0);
@@ -192,15 +232,15 @@ class ChatGeneratorTest {
     void kvCacheReusesExtendedPrefix() {
         ChatModel model = ChatModel.fromGguf(MiniChatGgufBuilder.buildIdentityModel());
         ChatGenerationOptions options = greedyWithPrefillChunk(model.tokenizer(), 2, 32);
-        ChatGenerator generator = new ChatGenerator(model, options);
+        ChatGenerator generator = new ChatGenerator(model, options, ChatHistoryMode.LEGACY);
 
         int[] prompt = {1, 2, 1, 2, 1};
         ChatGenerationResult first = generator.generateWithKvReuse(prompt);
         assertEquals(0, first.prefixReuseTokens());
 
-        int[] extended = concat(prompt, first.generatedTokenIds(), new int[] {2, 1, 2});
+        int[] extended = concat(prompt, first.forwardedTokenIds(), new int[] {2, 1, 2});
         ChatGenerationResult second = generator.generateWithKvReuse(extended);
-        assertEquals(prompt.length + first.tokenCount(), second.prefixReuseTokens());
+        assertEquals(prompt.length + first.forwardedTokenIds().length, second.prefixReuseTokens());
     }
 
     @Test
@@ -210,13 +250,13 @@ class ChatGeneratorTest {
         ChatGenerationOptions options = greedyWithPrefillChunk(warmModel.tokenizer(), 2, 32);
 
         int[] prompt = {1, 2, 1, 2, 1};
-        ChatGenerator warm = new ChatGenerator(warmModel, options);
+        ChatGenerator warm = new ChatGenerator(warmModel, options, ChatHistoryMode.LEGACY);
         ChatGenerationResult partial = warm.generateWithKvReuse(prompt);
 
-        int[] extended = concat(prompt, partial.generatedTokenIds(), new int[] {2, 1, 2});
+        int[] extended = concat(prompt, partial.forwardedTokenIds(), new int[] {2, 1, 2});
         ChatGenerationResult resumed = warm.generateWithKvReuse(extended);
 
-        ChatGenerator fresh = new ChatGenerator(freshModel, options);
+        ChatGenerator fresh = new ChatGenerator(freshModel, options, ChatHistoryMode.LEGACY);
         ChatGenerationResult fromScratch = fresh.generateWithKvReuse(extended);
 
         assertArrayEquals(fromScratch.generatedTokenIds(), resumed.generatedTokenIds());

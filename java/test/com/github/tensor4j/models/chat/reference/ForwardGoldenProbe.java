@@ -33,6 +33,12 @@ public final class ForwardGoldenProbe {
         System.out.println("llama3_template_ids=" + Arrays.toString(userHello));
         probe("llama3_template_user_hello", templateFixture, userHello);
 
+        GgufTensorSource qwenFixture = MiniChatGgufBuilder.buildQwen2TemplateModel();
+        ChatModel qwenModel = ChatModel.fromGguf(qwenFixture);
+        int[] qwenHello = ChatTemplate.QWEN2.encodePromptForGeneration(qwenModel.tokenizer(), "Hello");
+        System.out.println("qwen2_template_ids=" + Arrays.toString(qwenHello));
+        probe("qwen2_template_user_hello", qwenFixture, qwenHello);
+
         ChatModel identity = ChatModel.fromGguf(MiniChatGgufBuilder.buildIdentityModel());
         identity.resetCache();
         float[] inc = identity.forward(new int[] {1});

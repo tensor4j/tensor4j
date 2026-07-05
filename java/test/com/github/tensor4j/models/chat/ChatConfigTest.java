@@ -10,6 +10,7 @@
 package com.github.tensor4j.models.chat;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.github.tensor4j.runtime.infer.RopeScalingType;
 import com.github.tensor4j.models.chat.BpePreType;
@@ -38,5 +39,12 @@ class ChatConfigTest {
         assertEquals(RopeScalingType.YARN, config.ropeScaling());
         assertEquals(2.0f, config.ropeScaleFactor(), 1e-5f);
         assertEquals(4, config.ropeOrigCtx());
+    }
+
+    @Test
+    void parsesQwen2Architecture() {
+        ChatConfig config = ChatConfig.fromGguf(MiniChatGgufBuilder.buildQwen2TemplateModel().header());
+        assertEquals("qwen2", config.architecture());
+        assertTrue(config.isQwen2Family());
     }
 }

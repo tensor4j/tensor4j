@@ -31,14 +31,17 @@ public final class ChatGgufLoader {
             String prefix = "blk." + i + ".";
             layers[i] = new LlamaBlockForward.Weights(
                     lazyVector(source, prefix + "attn_norm.weight"),
-                    lazyQkMatrix(source, prefix + "attn_q.weight", config.nHead()),
-                    lazyKMatrix(source, prefix + "attn_k.weight", config.nHeadKv()),
+                    lazyQueryMatrix(source, prefix + "attn_q.weight", config),
+                    lazyKeyMatrix(source, prefix + "attn_k.weight", config),
                     lazyOutMajorMatrix(source, prefix + "attn_v.weight"),
-                    lazyMatrix(source, prefix + "attn_output.weight"),
+                    lazyOutputMatrix(source, prefix + "attn_output.weight", config),
                     lazyVector(source, prefix + "ffn_norm.weight"),
                     lazyOutMajorMatrix(source, prefix + "ffn_gate.weight"),
                     lazyOutMajorMatrix(source, prefix + "ffn_up.weight"),
-                    lazyOutMajorMatrix(source, prefix + "ffn_down.weight"));
+                    lazyOutMajorMatrix(source, prefix + "ffn_down.weight"),
+                    optionalVector(source, prefix + "attn_q.bias"),
+                    optionalVector(source, prefix + "attn_k.bias"),
+                    optionalVector(source, prefix + "attn_v.bias"));
         }
         return new ChatWeights(
                 lazyEmbedding(source, "token_embd.weight"),
@@ -65,6 +68,20 @@ public final class ChatGgufLoader {
                 InferWeight.Layout.MATRIX);
     }
 
+    private static InferWeight lazyQueryMatrix(GgufTensorSource source, String name, ChatConfig config) {
+        if (config.isQwen2Family()) {
+            return lazyOutMajorMatrix(source, name);
+        }
+        return lazyQkMatrix(source, name, config.nHead());
+    }
+
+    private static InferWeight lazyKeyMatrix(GgufTensorSource source, String name, ChatConfig config) {
+        if (config.isQwen2Family()) {
+            return lazyOutMajorMatrix(source, name);
+        }
+        return lazyKMatrix(source, name, config.nHeadKv());
+    }
+
     private static InferWeight lazyKMatrix(GgufTensorSource source, String name, int nKvHeads) {
         return InferWeight.lazy(
                 GgufWeightLoader.loadView(source, name, LlamaQkLayout.PERMUTE_QK_KV, nKvHeads),
@@ -77,11 +94,26 @@ public final class ChatGgufLoader {
                 InferWeight.Layout.MATRIX);
     }
 
+    /** Qwen2 uses output-major {@code attn_output}; llama keeps ggml-native layout. */
+    private static InferWeight lazyOutputMatrix(GgufTensorSource source, String name, ChatConfig config) {
+        if (config.isQwen2Family()) {
+            return lazyOutMajorMatrix(source, name);
+        }
+        return lazyMatrix(source, name);
+    }
+
     private static InferWeight lazyEmbedding(GgufTensorSource source, String name) {
         return InferWeight.lazy(GgufWeightLoader.loadView(source, name), InferWeight.Layout.EMBEDDING);
     }
 
     private static InferWeight lazyVector(GgufTensorSource source, String name) {
         return InferWeight.lazy(GgufWeightLoader.loadView(source, name), InferWeight.Layout.VECTOR);
+    }
+
+    private static InferWeight optionalVector(GgufTensorSource source, String name) {
+        if (source.header().findTensor(name) == null) {
+            return null;
+        }
+        return lazyVector(source, name);
     }
 }

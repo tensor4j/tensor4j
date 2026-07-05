@@ -51,6 +51,7 @@ public final class TinygradSamplingGoldenCases {
                 golden.seed(),
                 -1,
                 -1,
+                -1,
                 golden.alphaFrequency(),
                 golden.alphaPresence(),
                 golden.gumbelMax(),

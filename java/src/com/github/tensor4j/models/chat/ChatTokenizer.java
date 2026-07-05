@@ -20,6 +20,9 @@ public final class ChatTokenizer {
     private final String[] tokens;
     private final int bosId;
     private final int eosId;
+    private final int eotId;
+    private final boolean addBosToken;
+    private final String chatTemplate;
     private final BpePreType preType;
     private final BpeSplitMode splitMode;
     private final BpeTokenizer bpe;
@@ -28,12 +31,18 @@ public final class ChatTokenizer {
             String[] tokens,
             int bosId,
             int eosId,
+            int eotId,
+            boolean addBosToken,
+            String chatTemplate,
             BpePreType preType,
             BpeSplitMode splitMode,
             BpeTokenizer bpe) {
         this.tokens = tokens.clone();
         this.bosId = bosId;
         this.eosId = eosId;
+        this.eotId = eotId;
+        this.addBosToken = addBosToken;
+        this.chatTemplate = chatTemplate;
         this.preType = preType;
         this.splitMode = splitMode;
         this.bpe = bpe;
@@ -51,6 +60,9 @@ public final class ChatTokenizer {
         }
         int bos = intKv(header, "tokenizer.ggml.bos_token_id", 0);
         int eos = intKv(header, "tokenizer.ggml.eos_token_id", vocabTokens.length - 1);
+        int eot = resolveEotId(header, vocabTokens, eos);
+        boolean addBos = boolKv(header, "tokenizer.ggml.add_bos_token", true);
+        String chatTemplate = optionalStringKv(header, "tokenizer.chat_template");
         String pre = stringKv(header, "tokenizer.ggml.pre", "default");
         BpePreType preType = BpePreType.fromPre(pre);
         boolean ignoreMerges = boolKv(header, "tokenizer.ggml.ignore_merges", preType.defaultIgnoreMerges());
@@ -59,7 +71,7 @@ public final class ChatTokenizer {
             String[] merges = stringArrayKv(header, "tokenizer.ggml.merges");
             bpe = new BpeTokenizer(vocabTokens, merges, preType, options.splitMode(), ignoreMerges);
         }
-        return new ChatTokenizer(vocabTokens, bos, eos, preType, options.splitMode(), bpe);
+        return new ChatTokenizer(vocabTokens, bos, eos, eot, addBos, chatTemplate, preType, options.splitMode(), bpe);
     }
 
     public BpePreType preType() {
@@ -76,6 +88,46 @@ public final class ChatTokenizer {
 
     public int eosId() {
         return eosId;
+    }
+
+    /** End-of-turn token ({@code llama_vocab_eot}) — often {@code <|eot_id|>} for Llama 3. */
+    public int eotId() {
+        return eotId;
+    }
+
+    public boolean addBosToken() {
+        return addBosToken;
+    }
+
+    /** GGUF {@code tokenizer.chat_template} Jinja source, if present. */
+    public String chatTemplate() {
+        return chatTemplate;
+    }
+
+    /** llama.cpp {@code llama_vocab_is_eog} — stop generation without decoding into KV. */
+    public boolean isEndOfGeneration(int id) {
+        if (id == eosId) {
+            return true;
+        }
+        return eotId >= 0 && id == eotId;
+    }
+
+    /**
+     * Tokenize a prompt fragment ({@code llama_tokenize} with {@code parse_special=true}).
+     *
+     * @param isFirst when KV is empty — may prepend BOS for non-chat templates
+     */
+    public int[] tokenizePrompt(String text, boolean isFirst) {
+        int[] ids = encode(text);
+        if (isFirst && addBosToken && bosId >= 0 && ids.length > 0 && ids[0] != bosId) {
+            if (preType != BpePreType.LLAMA3 && preType != BpePreType.QWEN2 && preType != BpePreType.QWEN35) {
+                int[] withBos = new int[ids.length + 1];
+                withBos[0] = bosId;
+                System.arraycopy(ids, 0, withBos, 1, ids.length);
+                return withBos;
+            }
+        }
+        return ids;
     }
 
     public int vocabSize() {
@@ -187,6 +239,29 @@ public final class ChatTokenizer {
             }
         }
         throw new IllegalArgumentException("unknown token text " + text);
+    }
+
+    private static String optionalStringKv(GgufHeader header, String key) {
+        GgufKvEntry entry = header.findKv(key);
+        if (entry == null) {
+            return null;
+        }
+        return (String) entry.value();
+    }
+
+    private static int resolveEotId(GgufHeader header, String[] tokens, int eosId) {
+        GgufKvEntry entry = header.findKv("tokenizer.ggml.eot_token_id");
+        if (entry != null) {
+            return ((Number) entry.value()).intValue();
+        }
+        for (String name : new String[] {"<|eot_id|>", "<|" + "im_end" + "|>", "<|end_of_turn|>"}) {
+            for (int i = 0; i < tokens.length; i++) {
+                if (tokens[i].equals(name)) {
+                    return i;
+                }
+            }
+        }
+        return eosId;
     }
 
     private static String stringKv(GgufHeader header, String key, String defaultValue) {

@@ -21,6 +21,7 @@ public final class TinygradForwardGoldenCases {
                 identityA(),
                 identityAb(),
                 llama3TemplateUserHello(),
+                qwen2TemplateUserHello(),
         };
     }
 
@@ -53,7 +54,7 @@ public final class TinygradForwardGoldenCases {
                 "identity_ab",
                 "identity",
                 new int[] {1, 2},
-                new float[] {0.71957046f, 0.7467144f, 0.77385855f, 0.80100244f},
+                new float[] {0.7198997f, 0.7470079f, 0.77411616f, 0.80122435f},
                 1e-4f);
     }
 
@@ -66,7 +67,23 @@ public final class TinygradForwardGoldenCases {
                 "llama3_template_user_hello",
                 "llama3_template",
                 null,
-                new float[] {0.71063125f, 0.7383817f, 0.7661322f, 0.7938825f, 0.821633f},
+                new float[] {
+                    0.79339117f, 0.8122008f, 0.8310103f, 0.8498197f, 0.86862934f, 0.88743883f,
+                    0.90624845f, 0.9250579f, 0.85358745f, 0.8723892f, 0.8911909f
+                },
+                1e-4f);
+    }
+
+    /**
+     * {@link com.github.tensor4j.models.chat.fixture.MiniChatGgufBuilder#buildQwen2TemplateModel()}
+     * + {@link com.github.tensor4j.models.chat.ChatTemplate#QWEN2} user {@code Hello}.
+     */
+    private static TinygradForwardGoldenCase qwen2TemplateUserHello() {
+        return new TinygradForwardGoldenCase(
+                "qwen2_template_user_hello",
+                "qwen2_template",
+                null,
+                new float[] {0.75902104f, 0.7815475f, 0.804074f, 0.82660043f, 0.84912694f, 0.8716534f, 0.89417994f},
                 1e-4f);
     }
 }

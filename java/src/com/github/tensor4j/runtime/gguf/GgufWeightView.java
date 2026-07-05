@@ -41,8 +41,13 @@ public record GgufWeightView(GgufTensorSlice slice, LlamaQkLayout qkLayout, int 
             cols = (int) ne[0];
             GgufLlamaLayout.permuteQkInterleaved(data, rows, cols, nHeads);
         } else if (layout == LlamaQkLayout.REVERSE_GGUF_DIMS) {
-            rows = cols;
-            cols = (int) ne[0];
+            int d0 = (int) ne[0];
+            int d1 = cols;
+            if (GgufWeightLayoutMode.fromEnvironment().transposeReverseGgufDims()) {
+                data = GgufLlamaLayout.reverseGgufDims(data, d0, d1);
+            }
+            rows = d1;
+            cols = d0;
         }
         return InferTensor.of(data, rows, cols);
     }

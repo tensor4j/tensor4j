@@ -27,7 +27,23 @@ public final class LlamaBlockForward {
             InferWeight ffnNorm,
             InferWeight wGate,
             InferWeight wUp,
-            InferWeight wDown) {
+            InferWeight wDown,
+            InferWeight qBias,
+            InferWeight kBias,
+            InferWeight vBias) {
+
+        public Weights(
+                InferWeight attnNorm,
+                InferWeight wq,
+                InferWeight wk,
+                InferWeight wv,
+                InferWeight wo,
+                InferWeight ffnNorm,
+                InferWeight wGate,
+                InferWeight wUp,
+                InferWeight wDown) {
+            this(attnNorm, wq, wk, wv, wo, ffnNorm, wGate, wUp, wDown, null, null, null);
+        }
     }
 
     private LlamaBlockForward() {
@@ -49,6 +65,9 @@ public final class LlamaBlockForward {
                 weights.wk().tensor(),
                 weights.wv().tensor(),
                 weights.wo().tensor(),
+                optionalTensor(weights.qBias()),
+                optionalTensor(weights.kBias()),
+                optionalTensor(weights.vBias()),
                 cache,
                 nHead,
                 nHeadKv,
@@ -63,5 +82,9 @@ public final class LlamaBlockForward {
         InferTensor ffnMid = GgmlOps.swiglu(gate, up);
         InferTensor ffnOut = GgmlOps.mulMatOut(ffnMid, weights.wDown().tensor());
         return GgmlOps.add(afterAttn, ffnOut);
+    }
+
+    private static InferTensor optionalTensor(InferWeight weight) {
+        return weight == null ? null : weight.tensor();
     }
 }

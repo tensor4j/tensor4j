@@ -21,10 +21,10 @@ package com.github.tensor4j.chat.demo;
 
 
 import com.github.tensor4j.models.chat.ChatGenerationOptions;
-
 import com.github.tensor4j.models.chat.ChatGenerationResult;
-
 import com.github.tensor4j.models.chat.ChatGenerator;
+import com.github.tensor4j.models.chat.ChatHistoryMode;
+import com.github.tensor4j.models.chat.InferCompatMode;
 
 import com.github.tensor4j.models.chat.ChatModel;
 
@@ -70,25 +70,20 @@ public final class InteractiveChat {
 
         Files.createDirectories(saveDir);
 
-
-
-        ChatTemplate template = ChatTemplate.fromEnvironment();
-
-        String fileBase = FILE_STAMP.format(LocalDateTime.now()) + "-llama32";
-
-        printBanner(ggufPath, template, saveDir, fileBase);
-
-
+        String fileBase = FILE_STAMP.format(LocalDateTime.now()) + "-" + resolveLogBase(ggufPath);
 
         try (MmappedGgufFile mapped = MmappedGgufFile.open(Paths.get(ggufPath));
 
                 Scanner scanner = new Scanner(System.in, StandardCharsets.UTF_8)) {
 
             ChatModel model = ChatModel.fromGguf(mapped);
+            ChatTemplate template = ChatTemplate.fromEnvironmentOrTokenizer(model.tokenizer());
+            ChatHistoryMode historyMode = ChatHistoryMode.fromEnvironment();
+            printBanner(ggufPath, template, historyMode, saveDir, fileBase);
 
             ChatGenerationOptions options = ChatGenerationOptions.fromEnvironment(model.tokenizer());
 
-            ChatGenerator generator = new ChatGenerator(model, options);
+            ChatGenerator generator = new ChatGenerator(model, options, historyMode);
 
 
 
@@ -172,16 +167,17 @@ public final class InteractiveChat {
                     System.out.println();
 
                     System.out.printf(
-
                             Locale.US,
-
-                            "  [%d new tokens, %d prefix reused, session %d tokens]%n%n",
-
+                            "  [%d new tokens, stop=%s%s, %d left, %s, session %d tokens, kv %d]%n%n",
                             result.tokenCount(),
-
-                            result.prefixReuseTokens(),
-
-                            generator.sessionTokenIds().length);
+                            result.stopReason().name().toLowerCase(Locale.ROOT),
+                            result.stopTokenId() >= 0 ? " id=" + result.stopTokenId() : "",
+                            result.tokensRemaining(),
+                            historyMode == ChatHistoryMode.LLAMA && result.prefixReuseTokens() == 0
+                                    ? "delta-only"
+                                    : result.prefixReuseTokens() + " prefix reused",
+                            generator.sessionTokenIds().length,
+                            generator.kvLength());
 
 
 
@@ -285,9 +281,11 @@ public final class InteractiveChat {
 
                 Environment (set before launch or via chat.sh):
 
-                  TENSOR4J_GGUF_PATH      path to .gguf model (required)
+                  TENSOR4J_GGUF_PATH      path to .gguf (chat.sh defaults to Qwen2.5-1.5B-Instruct)
 
-                  TENSOR4J_CHAT_TEMPLATE  llama3 (default) or plain
+                  TENSOR4J_CHAT_TEMPLATE  qwen2 (default via chat.sh), llama3, or plain; auto from GGUF if unset
+
+                  TENSOR4J_CHAT_LOG_BASE  transcript suffix (default qwen25-1.5b; inferred from GGUF name)
 
                   TENSOR4J_CHAT_MODE      quality (default) or greedy
 
@@ -297,7 +295,12 @@ public final class InteractiveChat {
 
                   TENSOR4J_CHAT_SAVE_DIR  transcript directory (default ~/.local/conversations)
 
-                  TENSOR4J_CHAT_NO_KV_REUSE  true = full prefill each turn (debug bleed)
+                  TENSOR4J_CHAT_DEBUG          true = per-token stderr trace + stop summary
+
+                  TENSOR4J_INFER_COMPAT        tinygrad (parity) or llama (default; llama.cpp chat fixes)
+                  TENSOR4J_CHAT_HISTORY_MODE  delta (llama.cpp simple-chat, default) or legacy (full replay)
+
+                  TENSOR4J_CHAT_NO_KV_REUSE  true = full prefill each turn (legacy debug)
 
                 """);
 
@@ -305,13 +308,18 @@ public final class InteractiveChat {
 
 
 
-    private static void printBanner(String ggufPath, ChatTemplate template, Path saveDir, String fileBase) {
+    private static void printBanner(
+            String ggufPath, ChatTemplate template, ChatHistoryMode historyMode, Path saveDir, String fileBase) {
 
         System.out.println("tensor4j interactive chat");
 
         System.out.println("  model    : " + ggufPath);
 
         System.out.println("  template : " + template.name().toLowerCase(Locale.ROOT));
+
+        System.out.println("  history  : " + formatHistoryMode(historyMode));
+
+        System.out.println("  compat   : " + formatInferCompat(InferCompatMode.fromEnvironment()));
 
         System.out.println("  save dir : " + saveDir.toAbsolutePath());
 
@@ -329,7 +337,10 @@ public final class InteractiveChat {
 
         if (value == null || value.isBlank()) {
 
-            System.err.println("Missing " + key + " — set path to Llama 3.2 GGUF file.");
+            System.err.println(
+                    "Missing "
+                            + key
+                            + " — set path to a GGUF model (e.g. run chat.sh --download for Qwen2.5-1.5B).");
 
             System.exit(1);
 
@@ -361,6 +372,35 @@ public final class InteractiveChat {
 
         return Paths.get(home, ".local", "conversations");
 
+    }
+
+    private static String formatInferCompat(InferCompatMode mode) {
+        if (mode == InferCompatMode.TINYGRAD) {
+            return "tinygrad (parity reference; no llama.cpp chat fixes)";
+        }
+        return "llama.cpp (delta KV, sampled assistant ids, eot guards)";
+    }
+
+    private static String formatHistoryMode(ChatHistoryMode historyMode) {
+        if (historyMode == ChatHistoryMode.LLAMA) {
+            return "delta (llama.cpp simple-chat; prompt format follows template above)";
+        }
+        return "legacy (tinygrad full token replay)";
+    }
+
+    private static String resolveLogBase(String ggufPath) {
+        String env = System.getenv("TENSOR4J_CHAT_LOG_BASE");
+        if (env != null && !env.isBlank()) {
+            return env.trim();
+        }
+        String name = Paths.get(ggufPath).getFileName().toString().toLowerCase(Locale.ROOT);
+        if (name.contains("llama")) {
+            return "llama32";
+        }
+        if (name.contains("qwen")) {
+            return "qwen25-1.5b";
+        }
+        return "qwen25-1.5b";
     }
 
 }

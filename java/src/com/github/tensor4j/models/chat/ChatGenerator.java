@@ -10,12 +10,16 @@
 package com.github.tensor4j.models.chat;
 
 import com.github.tensor4j.models.chat.reference.TinygradGenerateReference;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * Stateful decode loop — chunked prefill, KV prefix reuse, streaming
- * (tinygrad {@code apps/llm.py} {@code generate()} + {@code get_start_pos()}).
+ * Stateful decode loop — chunked prefill, KV cache, streaming.
+ *
+ * <p>{@link ChatHistoryMode#LLAMA}: llama.cpp {@code simple-chat} delta tokenization (default).
+ * <p>{@link ChatHistoryMode#LEGACY}: tinygrad {@code apps/llm.py} full token replay + prefix reuse.
  */
 public final class ChatGenerator {
 
@@ -24,15 +28,31 @@ public final class ChatGenerator {
     private final ChatTokenizer tokenizer;
     private final ChatSamplingRng samplingRng;
     private final ChatSamplerState samplerState;
+    private final ChatHistoryMode historyMode;
+    private final LlamaCppChatApplier chatApplier;
+
     private int[] cachedTokens = new int[0];
     private int[] conversationTokens = new int[0];
 
+    private final List<ChatMessage> messages = new ArrayList<>();
+    private int templatePrevTokens;
+
     public ChatGenerator(ChatModel model, ChatGenerationOptions options) {
+        this(model, options, ChatHistoryMode.fromEnvironment());
+    }
+
+    public ChatGenerator(ChatModel model, ChatGenerationOptions options, ChatHistoryMode historyMode) {
         this.model = model;
         this.options = options;
         this.tokenizer = model.tokenizer();
         this.samplingRng = ChatSamplingRng.fromOptions(options);
         this.samplerState = new ChatSamplerState(tokenizer.vocabSize());
+        this.historyMode = historyMode;
+        this.chatApplier = historyMode == ChatHistoryMode.LLAMA ? LlamaCppChatApplier.fromTokenizer(tokenizer) : null;
+    }
+
+    public ChatHistoryMode historyMode() {
+        return historyMode;
     }
 
     /** Longest shared prefix between {@code tokens[:-1]} and {@code cached} (tinygrad {@code get_start_pos}). */
@@ -48,10 +68,6 @@ public final class ChatGenerator {
         return matched;
     }
 
-    /**
-     * Prefill slice lengths for {@code tokens[startPos:promptLen]} — same loop as
-     * {@link #prefillChunked(ChatModel, int[], int, int)} and tinygrad {@code generate()} prefill.
-     */
     static int[] prefillSliceLengths(int promptLen, int startPos, int chunkSize) {
         if (startPos >= promptLen) {
             throw new IllegalArgumentException("startPos beyond prompt length");
@@ -69,10 +85,6 @@ public final class ChatGenerator {
         return slices;
     }
 
-    /**
-     * Prefill vs decode forward flags for tinygrad {@code test_chunked_prefill}: every prompt-chunk
-     * forward is prefill; each post-prompt token yield adds one single-token (decode) forward.
-     */
     static boolean[] forwardPrefillFlags(int promptLen, int chunkSize, int yieldCount) {
         int[] slices = prefillSliceLengths(promptLen, 0, chunkSize);
         boolean[] flags = new boolean[slices.length + Math.max(0, yieldCount - 1)];
@@ -80,68 +92,95 @@ public final class ChatGenerator {
         return flags;
     }
 
-    /**
-     * Session-scoped generate with KV prefix reuse — mirrors tinygrad {@code Transformer.generate()}
-     * which always tracks {@code _cached_tokens}.
-     */
     ChatGenerationResult generateWithKvReuse(int[] promptIds) {
-        return generate(promptIds, true, null);
+        return generate(promptIds, true, false, null);
     }
 
     public void resetSession() {
         cachedTokens = new int[0];
         conversationTokens = new int[0];
+        messages.clear();
+        templatePrevTokens = 0;
         samplerState.reset();
         model.resetCache();
     }
 
-    /** Single-turn generation — always fresh KV cache. */
     public ChatGenerationResult generate(String prompt, ChatTemplate template) {
-        return generate(template.encodePromptForGeneration(tokenizer, prompt), false, null);
+        if (historyMode == ChatHistoryMode.LLAMA && chatApplier != null) {
+            messages.clear();
+            templatePrevTokens = 0;
+            model.resetCache();
+            messages.add(new ChatMessage("user", prompt));
+            int[] promptIds = chatApplier.tokenIds(tokenizer, messages, true);
+            ChatGenerationResult result = generate(promptIds, false, false, null);
+            finishTurnLlama(result.text(), result.forwardedTokenIds());
+            return result;
+        }
+        return generate(template.encodePromptForGeneration(tokenizer, prompt), false, false, null);
     }
 
-    /** Single-turn from token ids. */
     public ChatGenerationResult generate(int[] promptIds) {
-        return generate(promptIds, false, null);
+        return generate(promptIds, false, false, null);
     }
 
-    /** Multi-turn: append user message to session history and reuse KV prefix when possible. */
     public ChatGenerationResult continueConversation(String userMessage, ChatTemplate template) {
         samplerState.reset();
-        int[] promptIds = buildPromptIds(userMessage, template);
-        ChatGenerationResult result = generate(promptIds, kvReuseEnabled(), null);
-        finishTurn(promptIds, result.forwardedTokenIds(), template);
+        if (historyMode == ChatHistoryMode.LLAMA) {
+            return continueConversationLlama(userMessage, null);
+        }
+        int[] promptIds = buildPromptIdsLegacy(userMessage, template);
+        ChatGenerationResult result = generate(promptIds, kvReuseEnabled(), false, null);
+        finishTurnLegacy(promptIds, result.forwardedTokenIds(), template);
         return result;
     }
 
-    /** Multi-turn with streaming token pieces (stdout-friendly). */
     public ChatGenerationResult continueConversationStreaming(
             String userMessage, ChatTemplate template, Consumer<String> onPiece) {
         samplerState.reset();
-        int[] promptIds = buildPromptIds(userMessage, template);
-        ChatGenerationResult result = generate(promptIds, kvReuseEnabled(), onPiece);
-        finishTurn(promptIds, result.forwardedTokenIds(), template);
+        if (historyMode == ChatHistoryMode.LLAMA) {
+            return continueConversationLlama(userMessage, onPiece);
+        }
+        int[] promptIds = buildPromptIdsLegacy(userMessage, template);
+        ChatGenerationResult result = generate(promptIds, kvReuseEnabled(), false, onPiece);
+        finishTurnLegacy(promptIds, result.forwardedTokenIds(), template);
         return result;
     }
 
-    /** When {@code TENSOR4J_CHAT_NO_KV_REUSE=true}, prefill the full prompt every turn (debug). */
+    private ChatGenerationResult continueConversationLlama(String userMessage, Consumer<String> onPiece) {
+        messages.add(new ChatMessage("user", userMessage));
+        int[] promptIds = chatApplier.tokenDeltaSince(tokenizer, messages, true, templatePrevTokens);
+        ChatGenerationResult result = generate(promptIds, false, true, onPiece);
+        finishTurnLlama(result.text(), result.forwardedTokenIds());
+        return result;
+    }
+
     public static boolean kvReuseEnabled() {
         return !Boolean.parseBoolean(System.getenv().getOrDefault("TENSOR4J_CHAT_NO_KV_REUSE", "false"));
     }
 
-    /** Token ids that will be prefilled on the next {@link #continueConversation} call. */
     public int[] planPromptIds(String userMessage, ChatTemplate template) {
-        return buildPromptIds(userMessage, template);
+        if (historyMode == ChatHistoryMode.LLAMA) {
+            List<ChatMessage> planned = new ArrayList<>(messages);
+            planned.add(new ChatMessage("user", userMessage));
+            return chatApplier.tokenDeltaSince(tokenizer, planned, true, templatePrevTokens);
+        }
+        return buildPromptIdsLegacy(userMessage, template);
     }
 
-    /** Full session transcript token ids (after the last completed turn). */
     public int[] sessionTokenIds() {
         return conversationTokens.clone();
     }
 
-    /** Cached prompt ids used for KV prefix reuse (tinygrad {@code _cached_tokens}). */
     public int[] cachedTokenIds() {
         return cachedTokens.clone();
+    }
+
+    public List<ChatMessage> messages() {
+        return List.copyOf(messages);
+    }
+
+    public int templatePrevTokens() {
+        return templatePrevTokens;
     }
 
     public int kvLength() {
@@ -156,7 +195,11 @@ public final class ChatGenerator {
         return options;
     }
 
-    private int[] buildPromptIds(String userMessage, ChatTemplate template) {
+    int[] sessionTokenIdsForTests() {
+        return sessionTokenIds();
+    }
+
+    private int[] buildPromptIdsLegacy(String userMessage, ChatTemplate template) {
         int[] turn = concat(
                 template.encodeUserTurn(tokenizer, userMessage),
                 template.encodeAssistantPrime(tokenizer));
@@ -165,22 +208,44 @@ public final class ChatGenerator {
                 : concat(conversationTokens, turn);
     }
 
-    /** Package-private: session token ids after multi-turn turns (tests). */
-    int[] sessionTokenIdsForTests() {
-        return sessionTokenIds();
+    private void finishTurnLlama(String assistantText, int[] forwarded) {
+        if (InferCompatMode.fromEnvironment().useSampledAssistantTokenIds()) {
+            messages.add(new ChatMessage("assistant", assistantText, forwarded));
+        } else {
+            messages.add(new ChatMessage("assistant", assistantText));
+        }
+        templatePrevTokens = chatApplier.tokenCountAfterAssistantTurn(tokenizer, messages);
+        int[] closed = chatApplier.tokenIds(tokenizer, messages, false);
+        conversationTokens = closed;
+        cachedTokens = closed.clone();
+        if (!tokenizer.isEndOfGeneration(lastToken(forwarded))) {
+            int[] eot = ChatTemplate.fromTokenizer(tokenizer).encodeEndTurn(tokenizer);
+            model.forward(eot);
+        }
+        if (Boolean.parseBoolean(System.getenv().getOrDefault("TENSOR4J_CHAT_DEBUG", "false"))) {
+            int kv = model.kvLength();
+            System.err.printf(
+                    "chat session (llama): %d messages, %d template tokens, kv %d tokens%n",
+                    messages.size(), templatePrevTokens, kv);
+            if (kv != templatePrevTokens) {
+                System.err.printf(
+                        "chat session WARN: kv length (%d) != closed template tokens (%d) — delta/KV may drift%n",
+                        kv, templatePrevTokens);
+            }
+        }
     }
 
-    /**
-     * Append assistant {@code eot_id} to session + KV when the model stops without one
-     * (tinygrad interactive chat expects a closed turn before the next user header).
-     */
-    private void finishTurn(int[] promptIds, int[] forwarded, ChatTemplate template) {
+    private static int lastToken(int[] ids) {
+        return ids.length == 0 ? -1 : ids[ids.length - 1];
+    }
+
+    private void finishTurnLegacy(int[] promptIds, int[] forwarded, ChatTemplate template) {
         int[] closed = closeAssistantTurn(forwarded, template);
         conversationTokens = concat(promptIds, closed);
         cachedTokens = conversationTokens;
         if (Boolean.parseBoolean(System.getenv().getOrDefault("TENSOR4J_CHAT_DEBUG", "false"))) {
             System.err.printf(
-                    "chat session: %d tokens, ends with eot=%s%n",
+                    "chat session (legacy): %d tokens, ends with eot=%s%n",
                     conversationTokens.length,
                     conversationTokens.length > 0
                             && conversationTokens[conversationTokens.length - 1] == tokenizer.eosId());
@@ -188,10 +253,10 @@ public final class ChatGenerator {
     }
 
     private int[] closeAssistantTurn(int[] forwarded, ChatTemplate template) {
-        if (template != ChatTemplate.LLAMA3) {
+        if (!template.usesStructuredTurns()) {
             return forwarded;
         }
-        if (forwarded.length > 0 && forwarded[forwarded.length - 1] == tokenizer.eosId()) {
+        if (forwarded.length > 0 && tokenizer.isEndOfGeneration(forwarded[forwarded.length - 1])) {
             return forwarded;
         }
         int[] eot = template.encodeEndTurn(tokenizer);
@@ -199,16 +264,30 @@ public final class ChatGenerator {
         return concat(forwarded, eot);
     }
 
-    private ChatGenerationResult generate(int[] promptIds, boolean reusePrefix, Consumer<String> onPiece) {
+    private ChatGenerationResult generate(
+            int[] promptIds, boolean reusePrefix, boolean deltaAppend, Consumer<String> onPiece) {
         if (promptIds.length == 0) {
-            return new ChatGenerationResult("", 0, options.mode().name(), 0, new int[0], new int[0]);
+            return new ChatGenerationResult(
+                    "",
+                    0,
+                    options.mode().name(),
+                    0,
+                    new int[0],
+                    new int[0],
+                    ChatGenerationStopReason.EMPTY_PROMPT,
+                    -1,
+                    options.maxNewTokens(),
+                    new ChatGenerationStep[0]);
         }
+
+        boolean debug = Boolean.parseBoolean(System.getenv().getOrDefault("TENSOR4J_CHAT_DEBUG", "false"));
+        java.util.ArrayList<ChatGenerationStep> stepLog = debug ? new java.util.ArrayList<>() : null;
 
         int startPos = 0;
         if (reusePrefix && cachedTokens.length > 0) {
             startPos = sharedPrefixLength(promptIds, cachedTokens);
         }
-        if (startPos == 0 || model.kvLength() != startPos) {
+        if (!deltaAppend && (startPos == 0 || model.kvLength() != startPos)) {
             model.resetCache();
             startPos = 0;
         }
@@ -220,25 +299,41 @@ public final class ChatGenerator {
         int[] forwardedIds = new int[options.maxNewTokens()];
         int generated = 0;
         int forwarded = 0;
+        boolean llamaStop = historyMode == ChatHistoryMode.LLAMA;
+        ChatGenerationStopReason stopReason = ChatGenerationStopReason.MAX_TOKENS;
+        int stopTokenId = -1;
+        int stepsTaken = 0;
         for (int step = 0; step < options.maxNewTokens(); step++) {
+            stepsTaken = step + 1;
             int next = ChatSampler.sample(logits, options, generated, samplerState, samplingRng);
-            if (TinygradGenerateReference.shouldStop(next, tokenizer.eosId(), generated, options.minNewTokens())) {
-                // tinygrad generate() appends eos to ids / _cached_tokens before stopping
-                forwardedIds[forwarded++] = next;
-                model.forward(new int[] {next});
+            boolean endOfGen = tokenizer.isEndOfGeneration(next);
+            boolean stop = llamaStop
+                    ? endOfGen && generated >= options.minNewTokens()
+                    : TinygradGenerateReference.shouldStop(next, tokenizer.eosId(), generated, options.minNewTokens());
+            if (stop) {
+                stopReason = ChatGenerationStopReason.forEndToken(tokenizer, next);
+                stopTokenId = next;
+                if (!llamaStop) {
+                    forwardedIds[forwarded++] = next;
+                    model.forward(new int[] {next});
+                }
+                logStep(stepLog, step, next, null, false, true);
                 break;
             }
             if (tokenizer.skipGeneratedPiece(next)) {
+                logStep(stepLog, step, next, tokenizer.tokenText(next), false, endOfGen);
                 forwardedIds[forwarded++] = next;
                 logits = model.forward(new int[] {next});
                 continue;
             }
             String piece = tokenizer.tryDecodePiece(next);
             if (piece == null) {
+                logStep(stepLog, step, next, null, false, endOfGen);
                 forwardedIds[forwarded++] = next;
                 logits = model.forward(new int[] {next});
                 continue;
             }
+            logStep(stepLog, step, next, piece, true, endOfGen);
             completion.append(piece);
             if (onPiece != null) {
                 onPiece.accept(piece);
@@ -252,17 +347,53 @@ public final class ChatGenerator {
 
         int[] trimmed = Arrays.copyOf(generatedIds, generated);
         int[] forwardedTrimmed = Arrays.copyOf(forwardedIds, forwarded);
-        cachedTokens = concat(promptIds, forwardedTrimmed);
+        if (!deltaAppend) {
+            cachedTokens = concat(promptIds, forwardedTrimmed);
+        }
+        int prefixReuse = deltaAppend ? 0 : startPos;
+        ChatGenerationStep[] steps =
+                stepLog == null ? new ChatGenerationStep[0] : stepLog.toArray(new ChatGenerationStep[0]);
+        int tokensRemaining = Math.max(0, options.maxNewTokens() - stepsTaken);
+        if (debug) {
+            System.err.printf(
+                    "chat generate: stop=%s token=%d visible=%d forwarded=%d max=%d min=%d remaining=%d%n",
+                    stopReason,
+                    stopTokenId,
+                    generated,
+                    forwarded,
+                    options.maxNewTokens(),
+                    options.minNewTokens(),
+                    tokensRemaining);
+        }
         return new ChatGenerationResult(
                 completion.toString(),
                 generated,
                 options.mode().name(),
-                startPos,
+                prefixReuse,
                 trimmed,
-                forwardedTrimmed);
+                forwardedTrimmed,
+                stopReason,
+                stopTokenId,
+                tokensRemaining,
+                steps);
     }
 
-    /** Chunked prefill: forward {@code tokens[startPos:]} in blocks, return last-token logits. */
+    private static void logStep(
+            java.util.ArrayList<ChatGenerationStep> stepLog,
+            int step,
+            int tokenId,
+            String piece,
+            boolean visible,
+            boolean endOfGeneration) {
+        if (stepLog == null) {
+            return;
+        }
+        stepLog.add(new ChatGenerationStep(step, tokenId, piece, visible, endOfGeneration));
+        System.err.printf(
+                "  step %d: id=%d visible=%s eog=%s text=%s%n",
+                step, tokenId, visible, endOfGeneration, piece == null ? "(none)" : piece);
+    }
+
     static float[] prefillChunked(ChatModel model, int[] tokens, int startPos, int chunkSize) {
         if (startPos >= tokens.length) {
             throw new IllegalArgumentException("startPos beyond prompt length");

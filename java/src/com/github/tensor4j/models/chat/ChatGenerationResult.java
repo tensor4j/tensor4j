@@ -16,5 +16,54 @@ public record ChatGenerationResult(
         String mode,
         int prefixReuseTokens,
         int[] generatedTokenIds,
-        int[] forwardedTokenIds) {
+        int[] forwardedTokenIds,
+        ChatGenerationStopReason stopReason,
+        int stopTokenId,
+        int tokensRemaining,
+        ChatGenerationStep[] steps) {
+
+    /** Backward-compatible constructor without stop metadata. */
+    public ChatGenerationResult(
+            String text,
+            int tokenCount,
+            String mode,
+            int prefixReuseTokens,
+            int[] generatedTokenIds,
+            int[] forwardedTokenIds) {
+        this(
+                text,
+                tokenCount,
+                mode,
+                prefixReuseTokens,
+                generatedTokenIds,
+                forwardedTokenIds,
+                ChatGenerationStopReason.UNKNOWN,
+                -1,
+                0,
+                new ChatGenerationStep[0]);
+    }
+
+    /** Backward-compatible constructor without tokensRemaining. */
+    public ChatGenerationResult(
+            String text,
+            int tokenCount,
+            String mode,
+            int prefixReuseTokens,
+            int[] generatedTokenIds,
+            int[] forwardedTokenIds,
+            ChatGenerationStopReason stopReason,
+            int stopTokenId,
+            ChatGenerationStep[] steps) {
+        this(
+                text,
+                tokenCount,
+                mode,
+                prefixReuseTokens,
+                generatedTokenIds,
+                forwardedTokenIds,
+                stopReason,
+                stopTokenId,
+                0,
+                steps);
+    }
 }

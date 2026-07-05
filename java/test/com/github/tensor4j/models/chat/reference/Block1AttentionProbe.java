@@ -81,6 +81,15 @@ public final class Block1AttentionProbe {
         InferTensor q = GgmlOps.mulMatOut(normed, w.wq().tensor());
         InferTensor kCur = GgmlOps.mulMatOut(normed, w.wk().tensor());
         InferTensor vCur = GgmlOps.mulMatOut(normed, w.wv().tensor());
+        if (w.qBias() != null) {
+            q = GgmlOps.addRowBias(q, w.qBias().tensor());
+        }
+        if (w.kBias() != null) {
+            kCur = GgmlOps.addRowBias(kCur, w.kBias().tensor());
+        }
+        if (w.vBias() != null) {
+            vCur = GgmlOps.addRowBias(vCur, w.vBias().tensor());
+        }
         out.add(cp("q_proj", q));
         out.add(cp("k_proj", kCur));
         out.add(cp("v_proj", vCur));

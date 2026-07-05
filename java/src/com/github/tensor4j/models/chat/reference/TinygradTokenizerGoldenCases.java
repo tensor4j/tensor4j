@@ -61,7 +61,7 @@ public final class TinygradTokenizerGoldenCases {
             case "decode" -> throw new IllegalArgumentException("decode uses expectedDecode");
             case "role" -> TinygradTokenizerReference.role(tokenizer, golden.role());
             case "template_user" -> ChatTemplate.LLAMA3.encodeUser(tokenizer, golden.text());
-            case "end_turn" -> TinygradTokenizerReference.endTurn(tokenizer, tokenizer.eosId());
+            case "end_turn" -> TinygradTokenizerReference.endTurn(tokenizer, tokenizer.endTurnId());
             default -> throw new IllegalArgumentException("unknown kind " + golden.kind());
         };
     }

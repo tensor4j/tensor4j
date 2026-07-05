@@ -171,9 +171,10 @@ final class ChatSessionLogger implements AutoCloseable {
             writeTokenLegend(audit, result.forwardedTokenIds());
             audit.write("session_after len=");
             audit.write(Integer.toString(sessionAfter.length));
-            audit.write(" ends_eot=");
-            audit.write(Boolean.toString(
-                    sessionAfter.length > 0 && sessionAfter[sessionAfter.length - 1] == eot));
+            audit.write(" ends_im_end=");
+            audit.write(Boolean.toString(sessionEndsWithEndTurn(sessionAfter, eot)));
+            audit.write(" trailing_boundary");
+            audit.write(formatIds(trailingBoundary(sessionAfter, 4)));
             audit.write(" ends_eos=");
             audit.write(Boolean.toString(
                     sessionAfter.length > 0 && sessionAfter[sessionAfter.length - 1] == eos));
@@ -326,7 +327,11 @@ final class ChatSessionLogger implements AutoCloseable {
             return "<|eos|>";
         }
         if (id == tokenizer.eotId()) {
-            return "<|eot_id|>";
+            try {
+                return tokenizer.tokenText(id);
+            } catch (IllegalArgumentException ex) {
+                return "<|eot_id|>";
+            }
         }
         if (tokenizer.skipGeneratedPiece(id)) {
             try {
@@ -377,6 +382,25 @@ final class ChatSessionLogger implements AutoCloseable {
         }
         out.append(']');
         return out.toString();
+    }
+
+    /** Qwen closes turns with im_end then newline; Llama 3 ends on eot_id alone. */
+    private static boolean sessionEndsWithEndTurn(int[] session, int endTurnId) {
+        if (endTurnId < 0 || session.length == 0) {
+            return false;
+        }
+        if (session[session.length - 1] == endTurnId) {
+            return true;
+        }
+        return session.length >= 2 && session[session.length - 2] == endTurnId;
+    }
+
+    private static int[] trailingBoundary(int[] session, int count) {
+        if (session.length == 0 || count <= 0) {
+            return new int[0];
+        }
+        int start = Math.max(0, session.length - count);
+        return java.util.Arrays.copyOfRange(session, start, session.length);
     }
 
     private void flush() throws IOException {

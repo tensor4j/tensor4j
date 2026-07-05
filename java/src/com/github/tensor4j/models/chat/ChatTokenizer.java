@@ -95,6 +95,19 @@ public final class ChatTokenizer {
         return eotId;
     }
 
+    /**
+     * Structured chat end-of-turn token for {@link ChatTemplate#encodeEndTurn}.
+     *
+     * <p>Qwen GGUF sets {@code eos_token_id} to {@code <|endoftext|>} but ChatML turns close on
+     * {@code <|im_end|>} ({@link #eotId()}). Llama 3 typically uses the same id for both.
+     */
+    public int endTurnId() {
+        if ((preType == BpePreType.QWEN2 || preType == BpePreType.QWEN35) && eotId >= 0) {
+            return eotId;
+        }
+        return eosId;
+    }
+
     public boolean addBosToken() {
         return addBosToken;
     }

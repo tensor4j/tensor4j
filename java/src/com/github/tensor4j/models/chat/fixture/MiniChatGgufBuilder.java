@@ -126,21 +126,33 @@ public final class MiniChatGgufBuilder {
 
     /** Qwen2 ChatML tokens for {@link ChatTemplate#QWEN2} parity. */
     public static GgufFile buildQwen2TemplateModel() {
+        String imEnd = "<|" + "im_end" + "|>";
+        String[] tokens = {
+            "<|endoftext|>",
+            "Hello",
+            "<|im_start|>",
+            "user",
+            "assistant",
+            "\n",
+            imEnd,
+        };
+        // Real Qwen GGUF: eos=<|endoftext|>, turn boundary=<|im_end|> (resolved via eotId).
         return buildWithShape(
                 ModelShape.smoke(),
                 false,
                 false,
                 "qwen2",
-                new String[] {
-                    "<|endoftext|>",
-                    "Hello",
-                    "<|im_start|>",
-                    "user",
-                    "assistant",
-                    "\n",
-                    "<|" + "im_end" + "|>",
-                },
+                tokens,
+                new String[0],
+                null,
                 true,
+                0,
+                0,
+                null,
+                null,
+                true,
+                null,
+                false,
                 "qwen2");
     }
 

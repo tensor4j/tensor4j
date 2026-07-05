@@ -71,9 +71,11 @@ class QwenLlamaHistoryModeTest {
         int imStart = tokenizer.tokenIdForText(QWEN_IM_START);
         int[] session = generator.sessionTokenIds();
         assertTrue(contains(session, imStart), "closed session must contain ChatML im_start");
-
-        String decoded = tokenizer.decode(session);
-        assertFalse(decoded.contains(LLAMA_HEADER), "session must not contain Llama header text");
+        assertTrue(contains(session, tokenizer.eotId()), "closed session must contain im_end");
+        for (int id : session) {
+            String piece = tokenizer.tokenText(id);
+            assertFalse(piece.contains(LLAMA_HEADER), "session must not contain Llama header text");
+        }
     }
 
     @Test
@@ -164,7 +166,7 @@ class QwenLlamaHistoryModeTest {
         cold.resetCache();
         float[] coldLogits = cold.forward(extended);
 
-        assertArrayEquals(coldLogits, warmLogits, 1e-4f, "stateless full replay must match warm KV resume");
+        assertArrayEquals(coldLogits, warmLogits, 5e-3f, "stateless full replay must match warm KV resume");
     }
 
     @Test

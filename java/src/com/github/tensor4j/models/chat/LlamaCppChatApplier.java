@@ -94,7 +94,7 @@ public final class LlamaCppChatApplier {
                     ids,
                     template.encodeRole(tokenizer, message.role()),
                     body,
-                    template.encodeEndTurn(tokenizer));
+                    template.encodeEndTurnAfter(tokenizer, body));
         }
         if (addGenerationPrompt) {
             ids = concat(ids, template.encodeAssistantPrime(tokenizer));

@@ -9,6 +9,7 @@
  */
 package com.github.tensor4j.models.chat;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -20,19 +21,30 @@ import org.junit.jupiter.api.Test;
 class ChatTemplateQwenTest {
 
     @Test
-    void qwenTurnEndsWithEosAndNewline() {
+    void qwenTurnEndsWithImEndAndNewline() {
         GgufFile file = MiniChatGgufBuilder.buildQwen2TemplateModel();
         ChatTokenizer tokenizer = ChatTokenizer.fromGguf(file.header());
         assertEquals(BpePreType.QWEN2, tokenizer.preType());
+        assertTrue(tokenizer.eosId() != tokenizer.eotId(), "fixture must split eos vs im_end like real Qwen GGUF");
 
         int[] userTurn = ChatTemplate.QWEN2.encodeUserTurn(tokenizer, "Hello");
-        int eos = tokenizer.eosId();
-        assertTrue(lastIndexOf(userTurn, eos) >= 0, "user turn must include eos");
+        int imEnd = tokenizer.eotId();
+        assertTrue(lastIndexOf(userTurn, imEnd) >= 0, "user turn must include im_end");
         assertTrue(lastIndexOf(userTurn, tokenizer.tokenIdForText("<|im_start|>")) == 0);
 
         int[] prompt = ChatTemplate.QWEN2.encodePromptForGeneration(tokenizer, "Hello");
         assertEquals(0, ChatTemplate.QWEN2.encodePrefix(tokenizer).length, "qwen chat has no BOS prefix");
         assertTrue(prompt.length > userTurn.length);
+    }
+
+    @Test
+    void qwenEndTurnAfterImEndIsNewlineOnly() {
+        ChatTokenizer tokenizer = ChatTokenizer.fromGguf(MiniChatGgufBuilder.buildQwen2TemplateModel().header());
+        int imEnd = tokenizer.eotId();
+        int[] suffix = ChatTemplate.QWEN2.encodeEndTurnAfter(tokenizer, new int[] {imEnd});
+        int newlineId = tokenizer.tokenIdForText("\n");
+        assertEquals(1, suffix.length);
+        assertEquals(newlineId, suffix[0]);
     }
 
     private static int lastIndexOf(int[] array, int value) {

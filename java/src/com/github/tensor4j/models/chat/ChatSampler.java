@@ -54,9 +54,34 @@ public final class ChatSampler {
             int tokensGenerated,
             ChatSamplerState state,
             ChatSamplingRng samplingRng) {
+        return sample(logits, options, tokensGenerated, state, samplingRng, false);
+    }
+
+    /**
+     * Resample when an EOG token was drawn before {@code min_new_tokens}. Always masks
+     * BOS/EOS/EOT so {@code im_end} is never injected into KV mid-reply.
+     */
+    public static int sampleExcludingEndTokens(
+            float[] logits,
+            ChatGenerationOptions options,
+            int tokensGenerated,
+            ChatSamplerState state,
+            ChatSamplingRng samplingRng) {
+        return sample(logits, options, tokensGenerated, state, samplingRng, true);
+    }
+
+    private static int sample(
+            float[] logits,
+            ChatGenerationOptions options,
+            int tokensGenerated,
+            ChatSamplerState state,
+            ChatSamplingRng samplingRng,
+            boolean forceMaskEndTokens) {
         float[] work = logits.clone();
         sanitizeNaNs(work);
-        if (tokensGenerated < options.minNewTokens() && InferCompatMode.fromEnvironment().maskEndTokensDuringMinNewTokens()) {
+        if (forceMaskEndTokens
+                || (tokensGenerated < options.minNewTokens()
+                        && InferCompatMode.fromEnvironment().maskEndTokensDuringMinNewTokens())) {
             maskToken(work, options.bosId());
             maskToken(work, options.eosId());
             maskToken(work, options.eotId());

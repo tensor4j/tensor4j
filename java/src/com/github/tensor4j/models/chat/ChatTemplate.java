@@ -84,12 +84,24 @@ public enum ChatTemplate {
         return TinygradTokenizerReference.role(tokenizer, role);
     }
 
-    /** tinygrad {@code SimpleTokenizer.end_turn(eos_id)}. */
+    /** tinygrad {@code SimpleTokenizer.end_turn(eos_id)} — Qwen passes {@link ChatTokenizer#endTurnId()}. */
     public int[] encodeEndTurn(ChatTokenizer tokenizer) {
-        if (usesStructuredTurns()) {
-            return TinygradTokenizerReference.endTurn(tokenizer, tokenizer.eosId());
+        return encodeEndTurnAfter(tokenizer, new int[0]);
+    }
+
+    /**
+     * End-of-turn suffix after a message body. When the body already ends with {@code im_end} /
+     * {@code <|eot_id|>} (model stopped on EOG), Qwen still needs the trailing {@code \\n} only.
+     */
+    public int[] encodeEndTurnAfter(ChatTokenizer tokenizer, int[] body) {
+        if (!usesStructuredTurns()) {
+            return new int[0];
         }
-        return new int[0];
+        int endId = tokenizer.endTurnId();
+        if (body.length > 0 && body[body.length - 1] == endId) {
+            return TinygradTokenizerReference.trailingNewlineAfterEndTurn(tokenizer);
+        }
+        return TinygradTokenizerReference.endTurn(tokenizer, endId);
     }
 
     public static ChatTemplate fromEnvironment() {

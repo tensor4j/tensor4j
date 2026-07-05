@@ -218,9 +218,9 @@ public final class ChatGenerator {
         int[] closed = chatApplier.tokenIds(tokenizer, messages, false);
         conversationTokens = closed;
         cachedTokens = closed.clone();
+        ChatTemplate template = ChatTemplate.fromTokenizer(tokenizer);
         if (!tokenizer.isEndOfGeneration(lastToken(forwarded))) {
-            int[] eot = ChatTemplate.fromTokenizer(tokenizer).encodeEndTurn(tokenizer);
-            model.forward(eot);
+            model.forward(template.encodeEndTurn(tokenizer));
         }
         if (Boolean.parseBoolean(System.getenv().getOrDefault("TENSOR4J_CHAT_DEBUG", "false"))) {
             int kv = model.kvLength();
@@ -257,6 +257,11 @@ public final class ChatGenerator {
             return forwarded;
         }
         if (forwarded.length > 0 && tokenizer.isEndOfGeneration(forwarded[forwarded.length - 1])) {
+            int[] suffix = template.encodeEndTurnAfter(tokenizer, forwarded);
+            if (suffix.length > 0) {
+                model.forward(suffix);
+                return concat(forwarded, suffix);
+            }
             return forwarded;
         }
         int[] eot = template.encodeEndTurn(tokenizer);
@@ -307,12 +312,17 @@ public final class ChatGenerator {
             stepsTaken = step + 1;
             int next = ChatSampler.sample(logits, options, generated, samplerState, samplingRng);
             boolean endOfGen = tokenizer.isEndOfGeneration(next);
+            if (endOfGen && generated < options.minNewTokens()) {
+                next = ChatSampler.sampleExcludingEndTokens(logits, options, generated, samplerState, samplingRng);
+                endOfGen = tokenizer.isEndOfGeneration(next);
+            }
             boolean stop = llamaStop
                     ? endOfGen && generated >= options.minNewTokens()
                     : TinygradGenerateReference.shouldStop(next, tokenizer.eosId(), generated, options.minNewTokens());
             if (stop) {
                 stopReason = ChatGenerationStopReason.forEndToken(tokenizer, next);
                 stopTokenId = next;
+                // llama.cpp simple-chat: EOG ends decode — do not append stop token to KV
                 if (!llamaStop) {
                     forwardedIds[forwarded++] = next;
                     model.forward(new int[] {next});

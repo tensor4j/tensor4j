@@ -125,15 +125,15 @@ class ChatGeneratorTest {
     }
 
     @Test
-    void qwen2SessionClosesEachTurnWithEot() {
+    void qwen2SessionClosesEachTurnWithImEnd() {
         ChatModel model = ChatModel.fromGguf(MiniChatGgufBuilder.buildQwen2TemplateModel());
         ChatGenerator generator = new ChatGenerator(model, ChatGenerationOptions.greedy(model.tokenizer(), 8), ChatHistoryMode.LEGACY);
         generator.continueConversation("Hello", ChatTemplate.QWEN2);
         int[] session = generator.sessionTokenIdsForTests();
-        int eos = model.tokenizer().eosId();
+        int imEnd = model.tokenizer().eotId();
         assertTrue(
-                lastIndexOf(session, eos) >= session.length - 8,
-                "session should end with eos (qwen adds newline after)");
+                lastIndexOf(session, imEnd) >= session.length - 8,
+                "session should end with im_end (qwen adds newline after)");
     }
 
     private static int lastIndexOf(int[] array, int value) {

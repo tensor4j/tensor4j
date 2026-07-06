@@ -98,8 +98,8 @@ public final class ChatTokenizer {
     /**
      * Structured chat end-of-turn token for {@link ChatTemplate#encodeEndTurn}.
      *
-     * <p>Qwen GGUF sets {@code eos_token_id} to {@code <|endoftext|>} but ChatML turns close on
-     * {@code <|im_end|>} ({@link #eotId()}). Llama 3 typically uses the same id for both.
+     * <p>Qwen GGUF may set {@code eos_token_id} to {@code <|endoftext|>} while ChatML turns close on
+     * {@code <|im_end|>} ({@link #eotId()}).
      */
     public int endTurnId() {
         if ((preType == BpePreType.QWEN2 || preType == BpePreType.QWEN35) && eotId >= 0) {
@@ -158,6 +158,25 @@ public final class ChatTokenizer {
     public boolean skipGeneratedPiece(int id) {
         if (id == bosId || id == eosId) {
             return true;
+        }
+        if (preType == BpePreType.LLAMA3 && id >= 128000) {
+            return true;
+        }
+        String piece = tokenText(id);
+        return piece.startsWith("<|") && piece.endsWith("|>");
+    }
+
+    /**
+     * ChatML / Llama header tokens that must not appear inside assistant KV mid-reply.
+     * EOG ids stop generation via {@link #isEndOfGeneration(int)}, not resampling here.
+     */
+    public boolean isChatStructureInjectionToken(int id) {
+        if (isEndOfGeneration(id)) {
+            return false;
+        }
+        if (preType == BpePreType.QWEN2 || preType == BpePreType.QWEN35) {
+            String piece = tokenText(id);
+            return piece.startsWith("<|") && piece.endsWith("|>");
         }
         if (preType == BpePreType.LLAMA3 && id >= 128000) {
             return true;

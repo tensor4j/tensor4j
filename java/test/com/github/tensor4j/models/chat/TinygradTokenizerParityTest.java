@@ -69,6 +69,17 @@ class TinygradTokenizerParityTest {
                 ChatTemplate.LLAMA3.encodeEndTurn(tokenizer));
     }
 
+    @Test
+    void qwen2ChatMlBoundariesMatchTinygradGoldenCases() {
+        ChatTokenizer tokenizer = ChatTokenizer.fromGguf(TinygradTokenizerGoldenCases.qwen2TemplateFixture().header());
+        for (var golden : TinygradTokenizerGoldenCases.qwen2Cases()) {
+            assertArrayEquals(
+                    golden.expectedIds(),
+                    TinygradTokenizerGoldenCases.expectedFor(tokenizer, golden),
+                    golden.name());
+        }
+    }
+
     private static int[] concat(int[] a, int[] b) {
         int[] out = new int[a.length + b.length];
         System.arraycopy(a, 0, out, 0, a.length);

@@ -54,29 +54,40 @@ public final class ChatSampler {
             int tokensGenerated,
             ChatSamplerState state,
             ChatSamplingRng samplingRng) {
-        return sample(logits, options, tokensGenerated, state, samplingRng, false);
+        return sampleWithMasks(logits, options, tokensGenerated, state, samplingRng, false, false, null, -1);
     }
 
-    /**
-     * Resample when an EOG token was drawn before {@code min_new_tokens}. Always masks
-     * BOS/EOS/EOT so {@code im_end} is never injected into KV mid-reply.
-     */
+    /** Resample when EOG was drawn before {@code min_new_tokens}. */
     public static int sampleExcludingEndTokens(
             float[] logits,
             ChatGenerationOptions options,
             int tokensGenerated,
             ChatSamplerState state,
             ChatSamplingRng samplingRng) {
-        return sample(logits, options, tokensGenerated, state, samplingRng, true);
+        return sampleWithMasks(logits, options, tokensGenerated, state, samplingRng, true, false, null, -1);
     }
 
-    private static int sample(
+    /** Assistant decode for ChatML — mask role/header control tokens; EOG stays available. */
+    public static int sampleExcludingStructureTokens(
             float[] logits,
             ChatGenerationOptions options,
             int tokensGenerated,
             ChatSamplerState state,
             ChatSamplingRng samplingRng,
-            boolean forceMaskEndTokens) {
+            ChatTokenizer tokenizer) {
+        return sampleWithMasks(logits, options, tokensGenerated, state, samplingRng, false, true, tokenizer, -1);
+    }
+
+    private static int sampleWithMasks(
+            float[] logits,
+            ChatGenerationOptions options,
+            int tokensGenerated,
+            ChatSamplerState state,
+            ChatSamplingRng samplingRng,
+            boolean forceMaskEndTokens,
+            boolean maskStructureTokens,
+            ChatTokenizer tokenizer,
+            int alsoExcludeTokenId) {
         float[] work = logits.clone();
         sanitizeNaNs(work);
         if (forceMaskEndTokens
@@ -86,6 +97,10 @@ public final class ChatSampler {
             maskToken(work, options.eosId());
             maskToken(work, options.eotId());
         }
+        if (maskStructureTokens && tokenizer != null) {
+            maskChatStructureInjectionTokens(work, tokenizer);
+        }
+        maskToken(work, alsoExcludeTokenId);
         if (state != null) {
             state.applyAlphaPenalties(work, options.alphaFrequency(), options.alphaPresence());
         }
@@ -99,6 +114,14 @@ public final class ChatSampler {
         float[] probs = softmaxTemperature(work, options.temperature());
         applyTopP(probs, options.topP());
         return sampleMultinomial(probs, samplingRng);
+    }
+
+    private static void maskChatStructureInjectionTokens(float[] logits, ChatTokenizer tokenizer) {
+        for (int id = 0; id < logits.length; id++) {
+            if (tokenizer.isChatStructureInjectionToken(id)) {
+                logits[id] = Float.NEGATIVE_INFINITY;
+            }
+        }
     }
 
     private static void sanitizeNaNs(float[] logits) {

@@ -9,6 +9,7 @@
  */
 package com.github.tensor4j.models.chat.fixture;
 
+import com.github.tensor4j.models.chat.ChatTokenizer;
 import com.github.tensor4j.runtime.ggml.GgmlQuant;
 import com.github.tensor4j.runtime.ggml.GgmlTensorShape;
 import com.github.tensor4j.runtime.ggml.GgmlType;
@@ -127,16 +128,17 @@ public final class MiniChatGgufBuilder {
     /** Qwen2 ChatML tokens for {@link ChatTemplate#QWEN2} parity. */
     public static GgufFile buildQwen2TemplateModel() {
         String imEnd = "<|" + "im_end" + "|>";
-        String[] tokens = {
+        String[] tokens = new String[] {
             "<|endoftext|>",
             "Hello",
             "<|im_start|>",
             "user",
             "assistant",
-            "\n",
+            "system",
+            ChatTokenizer.llama3VocabPiece("\n"),
             imEnd,
         };
-        // Real Qwen GGUF: eos=<|endoftext|>, turn boundary=<|im_end|> (resolved via eotId).
+        // Real Qwen GGUF: eos=<|endoftext|>, ChatML turn close on im_end (eot).
         return buildWithShape(
                 ModelShape.smoke(),
                 false,

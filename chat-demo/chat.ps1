@@ -3,7 +3,8 @@
 # Use -Llama / --llama for Llama 3.2 1B Instruct instead.
 #
 # Usage:
-#   .\chat.ps1
+#   .\chat.ps1                        # greedy / 32 tokens — same defaults as tensor4j-gguf-it
+#   .\chat-enhanced.ps1               # quality / 256 tokens / focus — open-ended, may ask questions
 #   .\chat.ps1 -Download              # fetch default Qwen GGUF if missing
 #   .\chat.ps1 -Llama                 # Llama 3.2 1B instead of Qwen
 #   .\chat.ps1 -Gguf C:\path\to\model.gguf
@@ -17,6 +18,10 @@
 #   -Mode / --mode MODE   TENSOR4J_CHAT_MODE (quality|greedy)
 #   -MaxTokens / --max-tokens N   TENSOR4J_CHAT_MAX_TOKENS
 #   -SaveDir / --save-dir PATH   TENSOR4J_CHAT_SAVE_DIR
+#   -Legacy / --legacy   TENSOR4J_CHAT_HISTORY_MODE=legacy
+#   -NoDefaultSystem / --no-default-system   TENSOR4J_CHAT_DEFAULT_SYSTEM=false (llama.cpp raw template)
+#   -ClassicSystem / --classic-system   TENSOR4J_CHAT_SYSTEM_PROMPT=classic (llama.cpp system text)
+#   -Kv / --kv               TENSOR4J_CHAT_KV_CACHE=true (delta KV between turns; default off)
 #   -Build / --build         run mvn install before chat (default: skip build)
 #   -SkipBuild / --skip-build   default; kept for compatibility
 #   -Help / --help / -h          show help
@@ -78,6 +83,21 @@ while ($i -lt $args.Count) {
             $i += 1
             continue
         }
+        { $_ -in '-NoDefaultSystem', '--no-default-system' } {
+            $env:TENSOR4J_CHAT_DEFAULT_SYSTEM = "false"
+            $i += 1
+            continue
+        }
+        { $_ -in '-ClassicSystem', '--classic-system' } {
+            $env:TENSOR4J_CHAT_SYSTEM_PROMPT = "classic"
+            $i += 1
+            continue
+        }
+        { $_ -in '-Kv', '--kv' } {
+            $env:TENSOR4J_CHAT_KV_CACHE = "true"
+            $i += 1
+            continue
+        }
         default {
             Write-Error "Unknown option: $($args[$i])"
         }
@@ -91,9 +111,14 @@ $Tensor4jRoot = (Resolve-Path (Join-Path $ScriptDir "..")).Path
 $HomeDir = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
 $ModelsDir = Join-Path $HomeDir ".local/models"
 
-if (-not $env:TENSOR4J_CHAT_MODE) { $env:TENSOR4J_CHAT_MODE = "quality" }
+if (-not $env:TENSOR4J_CHAT_MODE) { $env:TENSOR4J_CHAT_MODE = "greedy" }
 if (-not $env:TENSOR4J_CHAT_HISTORY_MODE) { $env:TENSOR4J_CHAT_HISTORY_MODE = "llama" }
-if (-not $env:TENSOR4J_CHAT_MAX_TOKENS) { $env:TENSOR4J_CHAT_MAX_TOKENS = "256" }
+if (-not $env:TENSOR4J_CHAT_DEFAULT_SYSTEM) { $env:TENSOR4J_CHAT_DEFAULT_SYSTEM = "true" }
+if (-not $env:TENSOR4J_CHAT_DEBUG) { $env:TENSOR4J_CHAT_DEBUG = "false" }
+if (-not $env:TENSOR4J_CHAT_KV_CACHE) { $env:TENSOR4J_CHAT_KV_CACHE = "false" }
+if (-not $env:TENSOR4J_CHAT_SYSTEM_PROMPT) { $env:TENSOR4J_CHAT_SYSTEM_PROMPT = "focus" }
+if (-not $env:TENSOR4J_CHAT_MAX_TOKENS) { $env:TENSOR4J_CHAT_MAX_TOKENS = "32" }
+if (-not $env:TENSOR4J_CHAT_MIN_TOKENS) { $env:TENSOR4J_CHAT_MIN_TOKENS = "0" }
 if (-not $env:TENSOR4J_CHAT_SAVE_DIR) {
     $env:TENSOR4J_CHAT_SAVE_DIR = Join-Path $HomeDir ".local/conversations"
 }

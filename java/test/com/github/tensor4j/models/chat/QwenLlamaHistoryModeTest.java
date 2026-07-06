@@ -71,11 +71,11 @@ class QwenLlamaHistoryModeTest {
         int imStart = tokenizer.tokenIdForText(QWEN_IM_START);
         int[] session = generator.sessionTokenIds();
         assertTrue(contains(session, imStart), "closed session must contain ChatML im_start");
-        assertTrue(contains(session, tokenizer.eotId()), "closed session must contain im_end");
-        for (int id : session) {
-            String piece = tokenizer.tokenText(id);
-            assertFalse(piece.contains(LLAMA_HEADER), "session must not contain Llama header text");
-        }
+        assertEquals(tokenizer.tokenIdForText("system"), session[1], "session must open with system role token");
+
+        String decoded = tokenizer.decode(session);
+        assertTrue(decoded.startsWith(QWEN_IM_START + "system\n"), () -> "session decode must lead with system turn: " + decoded);
+        assertFalse(decoded.contains(LLAMA_HEADER), "session must not contain Llama header text");
     }
 
     @Test
@@ -164,9 +164,11 @@ class QwenLlamaHistoryModeTest {
 
         ChatModel cold = ChatModel.fromGguf(weights);
         cold.resetCache();
-        float[] coldLogits = cold.forward(extended);
+        float[] coldLogits = ChatGenerator.prefillChunked(cold, extended, 0, options.prefillChunkSize());
 
-        assertArrayEquals(coldLogits, warmLogits, 5e-3f, "stateless full replay must match warm KV resume");
+        if (extended.length <= warm.config().nCtx()) {
+            assertArrayEquals(coldLogits, warmLogits, 1e-4f, "stateless full replay must match warm KV resume");
+        }
     }
 
     @Test
@@ -186,9 +188,47 @@ class QwenLlamaHistoryModeTest {
 
         int[] reencoded = applier.tokenIds(model.tokenizer(), withReencode, false);
         int[] fromIds = applier.tokenIds(model.tokenizer(), withIds, false);
-        assertArrayEquals(generator.sessionTokenIds(), fromIds);
+        assertArrayEquals(generator.kvTokenIds(), fromIds);
         if (!Arrays.equals(reencoded, fromIds)) {
             assertNotEquals(reencoded.length, fromIds.length);
+        }
+    }
+
+    @Test
+    void turnOneAssistantImEndPrecedesTurnTwoUserDelta() {
+        ChatModel model = ChatModel.fromGguf(MiniChatGgufBuilder.buildQwen2TemplateModel());
+        ChatTokenizer tokenizer = model.tokenizer();
+        ChatGenerator generator = new ChatGenerator(
+                model, ChatGenerationOptions.greedy(tokenizer, 4), ChatHistoryMode.LLAMA);
+        generator.continueConversation("Hi", ChatTemplate.QWEN2);
+
+        int prev = generator.templatePrevTokens();
+        int[] closed = generator.kvTokenIds();
+        int endTurn = tokenizer.endTurnId();
+        int newline = tokenizer.encode("\n")[0];
+        assertTrue(prev >= 2, "closed template must have a boundary before turn 2");
+        assertEquals(endTurn, closed[closed.length - 2], "session must end with assistant im_end");
+        assertEquals(newline, closed[closed.length - 1], "session must end with newline after im_end");
+        assertEquals(prev, closed.length);
+        if (closed.length <= model.config().nCtx()) {
+            assertEquals(prev, generator.kvLength(), "KV must match session when within n_ctx");
+        }
+
+        int[] modelInput = generator.modelInputTokenIds("Yo", ChatTemplate.QWEN2);
+        assertEquals(endTurn, modelInput[prev - 2], "model input must have turn-1 assistant im_end before turn-2 user");
+        assertEquals(newline, modelInput[prev - 1]);
+        int[] userHeader = ChatTemplate.QWEN2.encodeRole(tokenizer, "user");
+        assertArrayEquals(userHeader, Arrays.copyOfRange(modelInput, prev, prev + userHeader.length));
+
+        LlamaCppChatApplier applier = LlamaCppChatApplier.fromTokenizer(tokenizer);
+        List<ChatMessage> planned = new ArrayList<>(generator.messages());
+        planned.add(new ChatMessage("user", "Yo"));
+        int[] full = applier.tokenIds(tokenizer, planned, true);
+        if (ChatGenerator.kvCacheEnabled()) {
+            assertArrayEquals(Arrays.copyOfRange(full, prev, full.length), generator.planPromptIds("Yo", ChatTemplate.QWEN2));
+        } else {
+            assertArrayEquals(full, generator.planPromptIds("Yo", ChatTemplate.QWEN2));
+            assertArrayEquals(full, modelInput);
         }
     }
 

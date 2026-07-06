@@ -45,6 +45,22 @@ npm run test:tensor4j
 mvn -f tensor4j/pom.xml test
 ```
 
+## Code coverage (JaCoCo)
+
+After unit tests, HTML and CSV reports are written under `target/site/jacoco/`:
+
+```bash
+cd tensor4j
+mvn test
+# open target/site/jacoco/index.html
+```
+
+Optional coverage gate (50% instruction + line minimum):
+
+```bash
+mvn verify -Pcoverage-gate
+```
+
 ## Algebra demo (standalone)
 
 `algebra-demo/` is a **separate Maven project** (standard `src/test` layout, Failsafe `*IT.java`). Install tensor4j first, then verify the demo module:

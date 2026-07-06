@@ -24,6 +24,9 @@ import com.github.tensor4j.models.chat.ChatGenerationOptions;
 import com.github.tensor4j.models.chat.ChatGenerationResult;
 import com.github.tensor4j.models.chat.ChatGenerator;
 import com.github.tensor4j.models.chat.ChatHistoryMode;
+import com.github.tensor4j.models.chat.ChatInferBufferPolicy;
+import com.github.tensor4j.models.chat.ChatMessage;
+import com.github.tensor4j.models.chat.ChatTokenDebugLog;
 import com.github.tensor4j.models.chat.InferCompatMode;
 
 import com.github.tensor4j.models.chat.ChatModel;
@@ -143,19 +146,41 @@ public final class InteractiveChat {
 
                     var tokenizer = model.tokenizer();
 
+                    int[] systemTurnIds = ChatTemplate.defaultSystemTurnEnabled() && template == ChatTemplate.QWEN2
+                            ? template.encodeSystemTurn(tokenizer, ChatTemplate.defaultSystemPromptText())
+                            : new int[0];
                     int[] userTurnIds = template.encodeUserTurn(tokenizer, line);
 
                     int[] assistantPrimeIds = template.encodeAssistantPrime(tokenizer);
 
                     int[] promptIds = generator.planPromptIds(line, template);
 
-                    int[] sessionBefore = generator.sessionTokenIds();
+                    int[] sessionBefore = generator.kvTokenIds();
 
                     int[] cachedBefore = generator.cachedTokenIds();
 
                     int kvBefore = generator.kvLength();
 
-
+                    int templatePrev = generator.templatePrevTokens();
+                    if (historyMode == ChatHistoryMode.LLAMA) {
+                        if (ChatGenerator.kvCacheEnabled()) {
+                            ChatTokenDebugLog.log(System.err, "session_tokens", tokenizer, sessionBefore);
+                            if (templatePrev > 0) {
+                                int[] modelInput = generator.modelInputTokenIds(line, template);
+                                ChatTokenDebugLog.log(System.err, "prefill_this_turn", tokenizer, promptIds);
+                                ChatTokenDebugLog.logModelInputTokens(
+                                        System.err, tokenizer, modelInput, sessionBefore.length);
+                            } else {
+                                ChatTokenDebugLog.log(System.err, "prefill_turn1", tokenizer, promptIds);
+                            }
+                            ChatTokenDebugLog.logKvHandoff(System.err, kvBefore, templatePrev, new int[0]);
+                        } else {
+                            ChatTokenDebugLog.log(System.err, "prefill_full_replay", tokenizer, promptIds);
+                        }
+                    } else {
+                        String promptLabel = ChatTokenDebugLog.promptDecodeLabel(templatePrev, false);
+                        ChatTokenDebugLog.log(System.err, promptLabel, tokenizer, promptIds);
+                    }
 
                     System.out.print("assistant> ");
                     System.out.flush();
@@ -173,19 +198,24 @@ public final class InteractiveChat {
                             result.stopReason().name().toLowerCase(Locale.ROOT),
                             result.stopTokenId() >= 0 ? " id=" + result.stopTokenId() : "",
                             result.tokensRemaining(),
-                            historyMode == ChatHistoryMode.LLAMA && result.prefixReuseTokens() == 0
-                                    ? "delta-only"
-                                    : result.prefixReuseTokens() + " prefix reused",
+                            historyMode == ChatHistoryMode.LLAMA && !ChatGenerator.kvCacheEnabled()
+                                    ? "full replay (kv off)"
+                                    : historyMode == ChatHistoryMode.LLAMA && result.prefixReuseTokens() == 0
+                                            ? "delta-only"
+                                            : result.prefixReuseTokens() + " prefix reused",
                             generator.sessionTokenIds().length,
                             generator.kvLength());
 
-
+                    ChatTokenDebugLog.logGenerationSteps(System.err, tokenizer, result.steps());
+                    ChatTokenDebugLog.log(System.err, "session_tokens", tokenizer, generator.kvTokenIds());
 
                     logger.logTurn(
 
                             logger.nextTurnNumber(),
 
                             line,
+
+                            systemTurnIds,
 
                             userTurnIds,
 
@@ -295,12 +325,26 @@ public final class InteractiveChat {
 
                   TENSOR4J_CHAT_SAVE_DIR  transcript directory (default ~/.local/conversations)
 
-                  TENSOR4J_CHAT_DEBUG          true = per-token stderr trace + stop summary
+                  TENSOR4J_CHAT_DEBUG          true (default) | false = silence stderr token traces
+                  TENSOR4J_CHAT_TOKEN_DEBUG_WIDTH  wrap width for token logs (default 100)
+                  TENSOR4J_CHAT_DEFAULT_SYSTEM true (default) | false = skip injected system turn
+                  TENSOR4J_CHAT_SYSTEM_PROMPT  focus (default) | classic = llama.cpp system text
 
                   TENSOR4J_INFER_COMPAT        tinygrad (parity) or llama (default; llama.cpp chat fixes)
                   TENSOR4J_CHAT_HISTORY_MODE  delta (llama.cpp simple-chat, default) or legacy (full replay)
 
-                  TENSOR4J_CHAT_NO_KV_REUSE  true = full prefill each turn (legacy debug)
+                  TENSOR4J_CHAT_KV_CACHE       false (default) | true = delta KV between turns
+                  TENSOR4J_CHAT_NO_KV_REUSE  true = disable legacy prefix reuse (requires kv on)
+                  TENSOR4J_CHAT_RESET_MODEL_EACH_TURN  default off when kv on, on when kv off
+                  TENSOR4J_CHAT_RESET_SAMPLER_EACH_TURN  true (default) | false
+                  TENSOR4J_CHAT_COPY_PROMPT_TOKENS   true (default) | false — clone int[] before forward
+                  TENSOR4J_CHAT_CLONE_FORWARD_LOGITS true (default) | false — clone logits after forward
+                  TENSOR4J_CHAT_CLONE_LOGITS         legacy alias for CLONE_FORWARD_LOGITS
+                  TENSOR4J_CHAT_DEFENSIVE_SESSION_COPY true (default) | false — clone session token arrays
+                  TENSOR4J_CHAT_BREAK_EOG_SPIN   true (default) | false — stop on im_end when min_new_tokens would spin
+                  TENSOR4J_CHAT_STRICT_SESSION   false (default) | true — throw on session token drift after turn
+                  TENSOR4J_CHAT_LOG_BUFFER_IDENTITY false (default) | true — stderr identityHashCode per buffer
+                  TENSOR4J_CHAT_LOG_PROMPT_TEXT  false (default) | true — stderr ChatML text before tokenize
 
                 """);
 
@@ -318,6 +362,26 @@ public final class InteractiveChat {
         System.out.println("  template : " + template.name().toLowerCase(Locale.ROOT));
 
         System.out.println("  history  : " + formatHistoryMode(historyMode));
+
+        System.out.println("  kv cache : " + (ChatGenerator.kvCacheEnabled() ? "on" : "off (full replay)"));
+        System.out.println("  infer    : resetModel="
+                + ChatGenerator.resetModelEachTurn()
+                + " resetSampler="
+                + ChatGenerator.resetSamplerEachTurn()
+                + " copyPrompt="
+                + ChatInferBufferPolicy.copyPromptTokens()
+                + " cloneLogits="
+                + ChatInferBufferPolicy.cloneForwardLogits()
+                + " sessionCopy="
+                + ChatInferBufferPolicy.defensiveSessionCopy()
+                + " breakEogSpin="
+                + ChatGenerator.breakEogSpinLoop()
+                + " strictSession="
+                + ChatGenerator.strictSessionDrift());
+
+        if (template == ChatTemplate.QWEN2 && ChatTemplate.defaultSystemTurnEnabled()) {
+            System.out.println("  system   : " + formatSystemPromptMode());
+        }
 
         System.out.println("  compat   : " + formatInferCompat(InferCompatMode.fromEnvironment()));
 
@@ -372,6 +436,13 @@ public final class InteractiveChat {
 
         return Paths.get(home, ".local", "conversations");
 
+    }
+
+    private static String formatSystemPromptMode() {
+        if (ChatTemplate.defaultSystemPromptText().equals(ChatTemplate.QWEN2_CLASSIC_SYSTEM)) {
+            return "classic (llama.cpp)";
+        }
+        return "focus (newest user only)";
     }
 
     private static String formatInferCompat(InferCompatMode mode) {

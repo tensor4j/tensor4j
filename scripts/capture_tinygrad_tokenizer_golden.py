@@ -81,6 +81,28 @@ class SimpleTokenizer:
         return [eos_id]
 
 
+def qwen2_fixture_vocab() -> tuple[dict[str, int], dict[str, int], str]:
+    im_end = "<|" + "im_end" + "|>"
+    tokens = [
+        "<|endoftext|>",
+        "Hello",
+        "<|im_start|>",
+        "user",
+        "assistant",
+        "system",
+        "\n",
+        im_end,
+    ]
+    normal: dict[str, int] = {}
+    special: dict[str, int] = {}
+    for i, tok in enumerate(tokens):
+        if tok.startswith("<|") and tok.endswith("|>") or tok == "\n":
+            special[tok] = i
+        else:
+            normal[tok] = i
+    return normal, special, "qwen2"
+
+
 def fixture_vocab() -> tuple[dict[str, int], dict[str, int], str]:
     tokens = ["<s>", "Hello", "a", "b", "</s>"]
     normal = {t: i for i, t in enumerate(tokens)}
@@ -90,10 +112,44 @@ def fixture_vocab() -> tuple[dict[str, int], dict[str, int], str]:
 def capture() -> dict:
     normal, special, preset = fixture_vocab()
     tok = SimpleTokenizer(normal, special, preset)
+    q_normal, q_special, q_preset = qwen2_fixture_vocab()
+    qtok = SimpleTokenizer(q_normal, q_special, q_preset)
+    im_end_id = q_special["<|" + "im_end" + "|>"]
     cases = [
         {"name": "encode_hello", "kind": "encode", "text": "Hello", "ids": tok.encode("Hello")},
         {"name": "decode_ab", "kind": "decode", "ids": [1, 2], "text": tok.decode([1, 2])},
         {"name": "role_user", "kind": "role", "role": "user", "ids": tok.role("user")},
+        {"name": "qwen2_role_user", "kind": "role", "role": "user", "ids": qtok.role("user"), "preset": "qwen2"},
+        {"name": "qwen2_role_system", "kind": "role", "role": "system", "ids": qtok.role("system"), "preset": "qwen2"},
+        {"name": "qwen2_role_assistant", "kind": "role", "role": "assistant", "ids": qtok.role("assistant"), "preset": "qwen2"},
+        {"name": "qwen2_end_turn", "kind": "end_turn", "ids": qtok.end_turn(im_end_id), "preset": "qwen2"},
+        {
+            "name": "qwen2_system_turn_default",
+            "kind": "system_turn",
+            "text": "You are a helpful assistant.",
+            "ids": qtok.role("system") + qtok.end_turn(im_end_id),
+            "preset": "qwen2",
+        },
+        {
+            "name": "qwen2_prompt_turn1_hello",
+            "kind": "prompt_turn1",
+            "text": "Hello",
+            "ids": qtok.role("system")
+            + qtok.end_turn(im_end_id)
+            + qtok.role("user")
+            + qtok.encode("Hello")
+            + qtok.end_turn(im_end_id)
+            + qtok.role("assistant"),
+            "preset": "qwen2",
+        },
+        {
+            "name": "qwen2_user_turn_hello",
+            "kind": "user_turn",
+            "text": "Hello",
+            "role": "user",
+            "ids": qtok.role("user") + qtok.encode("Hello") + qtok.end_turn(im_end_id),
+            "preset": "qwen2",
+        },
     ]
     return {"captureVersion": 1, "preset": preset, "cases": cases}
 

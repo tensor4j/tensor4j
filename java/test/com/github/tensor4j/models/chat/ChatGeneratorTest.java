@@ -11,6 +11,7 @@ package com.github.tensor4j.models.chat;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Arrays;
@@ -125,15 +126,20 @@ class ChatGeneratorTest {
     }
 
     @Test
-    void qwen2SessionClosesEachTurnWithImEnd() {
+    void qwen2SessionClosesEachTurnWithImEndThenNewline() {
         ChatModel model = ChatModel.fromGguf(MiniChatGgufBuilder.buildQwen2TemplateModel());
         ChatGenerator generator = new ChatGenerator(model, ChatGenerationOptions.greedy(model.tokenizer(), 8), ChatHistoryMode.LEGACY);
         generator.continueConversation("Hello", ChatTemplate.QWEN2);
         int[] session = generator.sessionTokenIdsForTests();
-        int imEnd = model.tokenizer().eotId();
-        assertTrue(
-                lastIndexOf(session, imEnd) >= session.length - 8,
-                "session should end with im_end (qwen adds newline after)");
+        ChatTokenizer tokenizer = model.tokenizer();
+        int endTurn = tokenizer.endTurnId();
+        int imEndIndex = lastIndexOf(session, endTurn);
+        assertTrue(imEndIndex >= 0, "session must include im_end");
+        int newlineId = tokenizer.encode("\n").length > 0
+                ? tokenizer.encode("\n")[0]
+                : tokenizer.tokenIdForText("\n");
+        assertEquals(newlineId, session[session.length - 1], "session must end with newline after im_end");
+        assertEquals(endTurn, session[session.length - 2], "im_end must precede trailing newline");
     }
 
     private static int lastIndexOf(int[] array, int value) {
@@ -157,8 +163,21 @@ class ChatGeneratorTest {
         assertEquals(0, first.prefixReuseTokens());
 
         ChatGenerationResult second = generator.continueConversation("Hello", ChatTemplate.PLAIN);
-        assertTrue(second.prefixReuseTokens() > 0, "second turn should reuse prior KV prefix");
+        if (ChatGenerator.kvCacheEnabled()) {
+            assertTrue(second.prefixReuseTokens() > 0, "second turn should reuse prior KV prefix");
+        } else {
+            assertEquals(0, second.prefixReuseTokens(), "KV off: full replay each turn");
+        }
         assertTrue(second.text().length() > 1, second::text);
+    }
+
+    @Test
+    void kvCacheDisabledByDefault() {
+        assertFalse(ChatGenerator.kvCacheEnabled());
+        assertFalse(ChatGenerator.parseKvCacheEnabled(null));
+        assertFalse(ChatGenerator.parseKvCacheEnabled(""));
+        assertFalse(ChatGenerator.parseKvCacheEnabled("false"));
+        assertTrue(ChatGenerator.parseKvCacheEnabled("true"));
     }
 
     @Test
@@ -261,5 +280,18 @@ class ChatGeneratorTest {
 
         assertArrayEquals(fromScratch.generatedTokenIds(), resumed.generatedTokenIds());
         assertEquals(fromScratch.text(), resumed.text());
+    }
+
+    @Test
+    void inferStateConfigDefaults() {
+        assertTrue(ChatGenerator.resetSamplerEachTurn());
+        assertTrue(ChatGenerator.cloneLogitsBeforeSample());
+        assertTrue(ChatInferBufferPolicy.copyPromptTokens());
+        assertTrue(ChatInferBufferPolicy.cloneForwardLogits());
+        assertTrue(ChatInferBufferPolicy.defensiveSessionCopy());
+        assertTrue(ChatGenerator.breakEogSpinLoop());
+        assertFalse(ChatGenerator.strictSessionDrift());
+        assertTrue(ChatGenerator.parseBoolEnv("TENSOR4J_CHAT_TEST_BOOL", true));
+        assertFalse(ChatGenerator.parseBoolEnv("TENSOR4J_CHAT_TEST_BOOL", false));
     }
 }

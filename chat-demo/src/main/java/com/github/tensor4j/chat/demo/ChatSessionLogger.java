@@ -14,7 +14,9 @@ import com.github.tensor4j.models.chat.ChatGenerationResult;
 import com.github.tensor4j.models.chat.ChatGenerationStep;
 import com.github.tensor4j.models.chat.ChatGenerationStopReason;
 import com.github.tensor4j.models.chat.ChatGenerator;
+import com.github.tensor4j.models.chat.ChatMessage;
 import com.github.tensor4j.models.chat.ChatTemplate;
+import com.github.tensor4j.models.chat.ChatTokenDebugLog;
 import com.github.tensor4j.models.chat.ChatTokenizer;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -85,6 +87,7 @@ final class ChatSessionLogger implements AutoCloseable {
     void logTurn(
             int turn,
             String userText,
+            int[] systemTurnIds,
             int[] userTurnIds,
             int[] assistantPrimeIds,
             int[] promptIds,
@@ -96,8 +99,8 @@ final class ChatSessionLogger implements AutoCloseable {
         try {
             int[] sessionAfter = generator.sessionTokenIds();
             int kvAfter = generator.kvLength();
-            int eos = tokenizer.eosId();
-            int eot = tokenizer.eotId();
+            int endTurn = tokenizer.endTurnId();
+            int newlineAfterEndTurn = newlineTokenId();
 
             markdown.write("## User\n\n");
             markdown.write(userText.isBlank() ? "_(empty)_" : userText);
@@ -125,27 +128,16 @@ final class ChatSessionLogger implements AutoCloseable {
             audit.write("user_text: ");
             audit.write(userText);
             audit.write('\n');
-            audit.write("user_turn_ids");
-            audit.write(formatIds(userTurnIds));
-            audit.write('\n');
-            audit.write("assistant_prime_ids");
-            audit.write(formatIds(assistantPrimeIds));
-            audit.write('\n');
-            audit.write("prompt_ids len=");
-            audit.write(Integer.toString(promptIds.length));
-            audit.write(formatIds(promptIds));
-            audit.write('\n');
+            writeMessagesHistory(audit, generator);
+            writeTokenBlock(audit, "system_turn_ids", systemTurnIds);
+            writeTokenBlock(audit, "user_turn_ids", userTurnIds);
+            writeTokenBlock(audit, "assistant_prime_ids", assistantPrimeIds);
+            writeTokenBlock(audit, "prompt_ids", promptIds);
             audit.write("prompt_decode: ");
             audit.write(safeDecode(promptIds));
             audit.write('\n');
-            audit.write("session_before len=");
-            audit.write(Integer.toString(sessionTokensBefore.length));
-            audit.write(formatIds(sessionTokensBefore));
-            audit.write('\n');
-            audit.write("cached_before len=");
-            audit.write(Integer.toString(cachedTokensBefore.length));
-            audit.write(formatIds(cachedTokensBefore));
-            audit.write('\n');
+            writeTokenBlock(audit, "session_before", sessionTokensBefore);
+            writeTokenBlock(audit, "cached_before", cachedTokensBefore);
             audit.write("kv_before=");
             audit.write(Integer.toString(kvBefore));
             audit.write(" kv_after=");
@@ -160,25 +152,14 @@ final class ChatSessionLogger implements AutoCloseable {
             audit.write(Integer.toString(result.tokensRemaining()));
             audit.write('\n');
             writeGenerationSteps(audit, result);
-            audit.write("generated_ids len=");
-            audit.write(Integer.toString(result.generatedTokenIds().length));
-            audit.write(formatIds(result.generatedTokenIds()));
+            writeTokenBlock(audit, "generated_ids", result.generatedTokenIds());
+            writeTokenBlock(audit, "forwarded_ids", result.forwardedTokenIds());
+            writeTokenBlock(audit, "session_after", sessionAfter);
+            audit.write("session_tail");
+            audit.write(formatTail(sessionAfter, 6));
             audit.write('\n');
-            audit.write("forwarded_ids len=");
-            audit.write(Integer.toString(result.forwardedTokenIds().length));
-            audit.write(formatIds(result.forwardedTokenIds()));
-            audit.write('\n');
-            writeTokenLegend(audit, result.forwardedTokenIds());
-            audit.write("session_after len=");
-            audit.write(Integer.toString(sessionAfter.length));
-            audit.write(" ends_im_end=");
-            audit.write(Boolean.toString(sessionEndsWithEndTurn(sessionAfter, eot)));
-            audit.write(" trailing_boundary");
-            audit.write(formatIds(trailingBoundary(sessionAfter, 4)));
-            audit.write(" ends_eos=");
-            audit.write(Boolean.toString(
-                    sessionAfter.length > 0 && sessionAfter[sessionAfter.length - 1] == eos));
-            audit.write(formatIds(sessionAfter));
+            audit.write("session_ends_im_end_newline: ");
+            audit.write(Boolean.toString(endsWithImEndNewline(sessionAfter, endTurn, newlineAfterEndTurn)));
             audit.write('\n');
             audit.write("session_decode: ");
             audit.write(safeDecode(sessionAfter));
@@ -269,6 +250,10 @@ final class ChatSessionLogger implements AutoCloseable {
         audit.write(Integer.toString(options.eosId()));
         audit.write(" eot_id=");
         audit.write(Integer.toString(options.eotId()));
+        audit.write(" end_turn_id=");
+        audit.write(Integer.toString(tokenizer.endTurnId()));
+        audit.write(" default_system=");
+        audit.write(Boolean.toString(ChatTemplate.defaultSystemTurnEnabled()));
         audit.write(" kv_reuse=");
         audit.write(Boolean.toString(ChatGenerator.kvReuseEnabled()));
         audit.write('\n');
@@ -303,104 +288,62 @@ final class ChatSessionLogger implements AutoCloseable {
             out.write(" eog=");
             out.write(Boolean.toString(step.endOfGeneration()));
             out.write(" text=");
-            out.write(step.piece() == null ? "(none)" : describeToken(step.tokenId()));
+            out.write(ChatTokenDebugLog.describePiece(tokenizer, step.tokenId()));
             out.write('\n');
         }
     }
 
-    private void writeTokenLegend(BufferedWriter out, int[] ids) throws IOException {
-        out.write("forwarded_token_map:\n");
-        for (int id : ids) {
-            out.write("  ");
-            out.write(Integer.toString(id));
-            out.write(" -> ");
-            out.write(describeToken(id));
+    private void writeTokenBlock(BufferedWriter out, String label, int[] ids) throws IOException {
+        ChatTokenDebugLog.writeBlock(out, label, tokenizer, ids);
+        out.write('\n');
+    }
+
+    private void writeMessagesHistory(BufferedWriter out, ChatGenerator generator) throws IOException {
+        out.write("messages_history:\n");
+        int i = 0;
+        for (ChatMessage message : generator.messages()) {
+            out.write("  [");
+            out.write(Integer.toString(i++));
+            out.write("] ");
+            out.write(message.role());
+            out.write(": ");
+            out.write(message.content().replace("\n", "\\n"));
+            if (message.generatedTokenIds() != null) {
+                out.write(" (sampled_ids len=");
+                out.write(Integer.toString(message.generatedTokenIds().length));
+                out.write(')');
+            }
             out.write('\n');
         }
     }
 
-    private String describeToken(int id) {
-        if (id == tokenizer.bosId()) {
-            return "<|bos|>";
-        }
-        if (id == tokenizer.eosId()) {
-            return "<|eos|>";
-        }
-        if (id == tokenizer.eotId()) {
-            try {
-                return tokenizer.tokenText(id);
-            } catch (IllegalArgumentException ex) {
-                return "<|eot_id|>";
-            }
-        }
-        if (tokenizer.skipGeneratedPiece(id)) {
-            try {
-                return tokenizer.tokenText(id);
-            } catch (IllegalArgumentException ex) {
-                return "<|special|>";
-            }
-        }
-        String piece = tokenizer.tryDecodePiece(id);
-        if (piece == null) {
-            try {
-                return tokenizer.tokenText(id);
-            } catch (IllegalArgumentException ex) {
-                return "<|unknown|>";
-            }
-        }
-        return quote(piece);
+    private int newlineTokenId() {
+        int[] encoded = tokenizer.encode("\n");
+        return encoded.length > 0 ? encoded[0] : -1;
     }
 
-    private static String quote(String text) {
-        return "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\"";
+    private static boolean endsWithImEndNewline(int[] session, int imEndId, int newlineId) {
+        if (session.length < 2 || newlineId < 0) {
+            return false;
+        }
+        return session[session.length - 1] == newlineId && session[session.length - 2] == imEndId;
+    }
+
+    private String formatTail(int[] ids, int count) {
+        if (ids.length == 0) {
+            return " []";
+        }
+        int start = Math.max(0, ids.length - count);
+        int[] tail = Arrays.copyOfRange(ids, start, ids.length);
+        return ChatTokenDebugLog.formatIds(tail) + "\n" + ChatTokenDebugLog.formatTokenMap(tokenizer, tail);
     }
 
     private String safeDecode(int[] ids) {
         try {
-            return quote(tokenizer.decode(ids));
+            return ChatTokenDebugLog.quote(tokenizer.decode(ids));
         } catch (IllegalArgumentException ex) {
             return "(decode failed: " + ex.getMessage() + ")";
         }
-    }
-
-    private static String formatIds(int[] ids) {
-        if (ids.length == 0) {
-            return " []";
-        }
-        StringBuilder out = new StringBuilder(" [");
-        int show = Math.min(ids.length, 512);
-        for (int i = 0; i < show; i++) {
-            if (i > 0) {
-                out.append(", ");
-            }
-            out.append(ids[i]);
-        }
-        if (ids.length > show) {
-            out.append(", ... (+");
-            out.append(ids.length - show);
-            out.append(" more)");
-        }
-        out.append(']');
-        return out.toString();
-    }
-
-    /** Qwen closes turns with im_end then newline; Llama 3 ends on eot_id alone. */
-    private static boolean sessionEndsWithEndTurn(int[] session, int endTurnId) {
-        if (endTurnId < 0 || session.length == 0) {
-            return false;
-        }
-        if (session[session.length - 1] == endTurnId) {
-            return true;
-        }
-        return session.length >= 2 && session[session.length - 2] == endTurnId;
-    }
-
-    private static int[] trailingBoundary(int[] session, int count) {
-        if (session.length == 0 || count <= 0) {
-            return new int[0];
-        }
-        int start = Math.max(0, session.length - count);
-        return java.util.Arrays.copyOfRange(session, start, session.length);
     }
 
     private void flush() throws IOException {

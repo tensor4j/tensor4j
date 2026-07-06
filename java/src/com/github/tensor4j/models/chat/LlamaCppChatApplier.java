@@ -84,17 +84,14 @@ public final class LlamaCppChatApplier {
      */
     public int[] tokenIds(ChatTokenizer tokenizer, List<ChatMessage> messages, boolean addGenerationPrompt) {
         ChatTemplate template = ChatTemplate.fromTokenizer(tokenizer);
-        int[] ids = new int[0];
-        if (messages.isEmpty() || !"system".equals(messages.get(0).role())) {
-            ids = template.encodePrefix(tokenizer);
-        }
+        int[] ids = template.encodePrefix(tokenizer);
+        boolean hasLeadingSystem = !messages.isEmpty() && "system".equals(messages.get(0).role());
+        ids = concat(ids, template.encodeDefaultSystemTurnIfMissing(tokenizer, hasLeadingSystem));
         for (ChatMessage message : messages) {
+            int[] role = template.encodeRole(tokenizer, message.role());
             int[] body = messageBodyTokenIds(tokenizer, message);
-            ids = concat(
-                    ids,
-                    template.encodeRole(tokenizer, message.role()),
-                    body,
-                    template.encodeEndTurnAfter(tokenizer, body));
+            int[] turn = concat(role, body);
+            ids = concat(ids, turn, template.encodeEndTurnAfter(tokenizer, turn));
         }
         if (addGenerationPrompt) {
             ids = concat(ids, template.encodeAssistantPrime(tokenizer));

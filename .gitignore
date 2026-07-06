@@ -1,4 +1,5 @@
 /target
+/notes
 /java/build
 /vendor
 /jnlp
@@ -9,3 +10,5 @@
 /java/resources/fixtures/tinygrad-llama32-chat-vocab-full.json
 /java/resources/fixtures/tinygrad-llama32-chat-vocab-pruned.json
 /java/resources/fixtures/tinygrad-llama32-chat-vocab.json
+/tensor4j-gguf-it/target
+/scripts/__pycache__

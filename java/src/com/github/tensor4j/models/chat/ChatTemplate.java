@@ -30,13 +30,64 @@ public enum ChatTemplate {
         }
     },
 
-    /** Qwen2 / Qwen2.5 ChatML ({@code <|im_start|>role\\n ... \\n}). */
+    /** Qwen2 / Qwen2.5 ChatML: {@code <|im_start|>role\\n ... <|im_end|>\\n} per closed turn. */
     QWEN2 {
         @Override
         public int[] encodeUser(ChatTokenizer tokenizer, String message) {
             return concat(TinygradTokenizerReference.role(tokenizer, "user"), tokenizer.encode(message));
         }
     };
+
+    /** llama.cpp / HF ChatML default (use via {@code TENSOR4J_CHAT_SYSTEM_PROMPT=classic}). */
+    public static final String QWEN2_CLASSIC_SYSTEM = "You are a helpful assistant.";
+
+    /** @deprecated use {@link #QWEN2_CLASSIC_SYSTEM} or {@link #defaultSystemPromptText()} */
+    public static final String QWEN2_DEFAULT_SYSTEM = QWEN2_CLASSIC_SYSTEM;
+
+    /** Default injected system turn — steers multi-turn toward the latest user message. */
+    public static final String QWEN2_FOCUS_NEWEST_USER_SYSTEM =
+            "You are a helpful assistant and should focus on the newest user prompt at the end only and ignore all earlier user prompts";
+
+    /**
+     * Injected Qwen system text when no {@code system} message is supplied.
+     *
+     * <p>Default ({@code TENSOR4J_CHAT_SYSTEM_PROMPT} unset or {@code focus}): {@link
+     * #QWEN2_FOCUS_NEWEST_USER_SYSTEM}. Set {@code classic} for {@link #QWEN2_CLASSIC_SYSTEM}.
+     */
+    public static String defaultSystemPromptText() {
+        return parseSystemPromptMode(System.getenv("TENSOR4J_CHAT_SYSTEM_PROMPT"));
+    }
+
+    static String parseSystemPromptMode(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return QWEN2_FOCUS_NEWEST_USER_SYSTEM;
+        }
+        String mode = raw.trim().toLowerCase(java.util.Locale.ROOT);
+        if ("classic".equals(mode) || "llama".equals(mode) || "default".equals(mode)) {
+            return QWEN2_CLASSIC_SYSTEM;
+        }
+        if ("focus".equals(mode) || "newest".equals(mode) || "debug".equals(mode)) {
+            return QWEN2_FOCUS_NEWEST_USER_SYSTEM;
+        }
+        return QWEN2_FOCUS_NEWEST_USER_SYSTEM;
+    }
+
+    /**
+     * Whether Qwen chat prepends a default system turn when callers omit a system message.
+     *
+     * <p>Default {@code true} ({@code TENSOR4J_CHAT_DEFAULT_SYSTEM} unset). Set to {@code false} for raw
+     * llama.cpp {@code llama_chat_apply_template} parity (user-first, no injected system turn).
+     */
+    public static boolean defaultSystemTurnEnabled() {
+        return parseDefaultSystemTurnEnabled(System.getenv("TENSOR4J_CHAT_DEFAULT_SYSTEM"));
+    }
+
+    static boolean parseDefaultSystemTurnEnabled(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return true;
+        }
+        return Boolean.parseBoolean(raw.trim());
+    }
 
     public abstract int[] encodeUser(ChatTokenizer tokenizer, String message);
 
@@ -69,14 +120,32 @@ public enum ChatTemplate {
         return new int[0];
     }
 
+    /** {@code <|im_start|>system\\n ... <|im_end|>\\n} */
+    public int[] encodeSystemTurn(ChatTokenizer tokenizer, String systemText) {
+        if (!usesStructuredTurns()) {
+            return new int[0];
+        }
+        return concat(concat(encodeRole(tokenizer, "system"), tokenizer.encode(systemText)), encodeEndTurn(tokenizer));
+    }
+
+    /** ChatML expects a leading system turn when {@link #defaultSystemTurnEnabled()}. */
+    public int[] encodeDefaultSystemTurnIfMissing(ChatTokenizer tokenizer, boolean hasLeadingSystem) {
+        if (this == QWEN2 && defaultSystemTurnEnabled() && !hasLeadingSystem) {
+            return encodeSystemTurn(tokenizer, defaultSystemPromptText());
+        }
+        return new int[0];
+    }
+
     /**
-     * Full prefill for one-shot generation: prefix + user turn + assistant prime
+     * Full prefill for one-shot generation: prefix + optional default system + user turn + assistant prime
      * (tinygrad chat server message loop).
      */
     public int[] encodePromptForGeneration(ChatTokenizer tokenizer, String message) {
         return concat(
                 encodePrefix(tokenizer),
-                concat(encodeUserTurn(tokenizer, message), encodeAssistantPrime(tokenizer)));
+                concat(
+                        encodeDefaultSystemTurnIfMissing(tokenizer, false),
+                        concat(encodeUserTurn(tokenizer, message), encodeAssistantPrime(tokenizer))));
     }
 
     /** tinygrad {@code SimpleTokenizer.role(role)}. */
@@ -84,14 +153,18 @@ public enum ChatTemplate {
         return TinygradTokenizerReference.role(tokenizer, role);
     }
 
-    /** tinygrad {@code SimpleTokenizer.end_turn(eos_id)} — Qwen passes {@link ChatTokenizer#endTurnId()}. */
+    /** ChatML turn close — Qwen uses {@link ChatTokenizer#endTurnId()} ({@code im_end}), not {@code endoftext}. */
     public int[] encodeEndTurn(ChatTokenizer tokenizer) {
-        return encodeEndTurnAfter(tokenizer, new int[0]);
+        if (usesStructuredTurns()) {
+            return TinygradTokenizerReference.endTurn(tokenizer, tokenizer.endTurnId());
+        }
+        return new int[0];
     }
 
     /**
-     * End-of-turn suffix after a message body. When the body already ends with {@code im_end} /
-     * {@code <|eot_id|>} (model stopped on EOG), Qwen still needs the trailing {@code \\n} only.
+     * KV suffix after assistant decode. When llama mode stopped on EOG without forwarding it, append
+     * {@code im_end} + {@code \\n}; when forwarded ids already end on {@link ChatTokenizer#endTurnId()},
+     * append the trailing {@code \\n} only.
      */
     public int[] encodeEndTurnAfter(ChatTokenizer tokenizer, int[] body) {
         if (!usesStructuredTurns()) {

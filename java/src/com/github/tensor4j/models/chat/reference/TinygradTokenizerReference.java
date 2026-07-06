@@ -24,10 +24,10 @@ public final class TinygradTokenizerReference {
     }
 
     public static int[] role(ChatTokenizer tokenizer, String role) {
-        if (tokenizer.preType() == BpePreType.QWEN2 || tokenizer.preType() == BpePreType.QWEN35) {
+        if (tokenizer.preType() == BpePreType.QWEN2) {
             return concat(
                     new int[] {tokenizer.tokenIdForText("<|im_start|>")},
-                    tokenizer.encode(role + "\n"));
+                    concat(tokenizer.encode(role), trailingNewlineAfterEndTurn(tokenizer)));
         }
         return concat(
                 new int[] {tokenizer.tokenIdForText(LLAMA3_HEADER_START)},
@@ -38,32 +38,28 @@ public final class TinygradTokenizerReference {
                                 tokenizer.encodeRoleSuffixNewlines())));
     }
 
-    /** {@code SimpleTokenizer.end_turn(eos_id)} — for Qwen, {@code eos_id} is {@link ChatTokenizer#endTurnId()}. */
-    public static int[] endTurn(ChatTokenizer tokenizer, int endTurnId) {
-        if (tokenizer.preType() == BpePreType.QWEN2 || tokenizer.preType() == BpePreType.QWEN35) {
-            return concat(new int[] {endTurnId}, qwenNewlineSuffix(tokenizer));
+    /** {@code SimpleTokenizer.end_turn(eos_id)} — Qwen passes {@link ChatTokenizer#endTurnId()}. */
+    public static int[] endTurn(ChatTokenizer tokenizer, int eosId) {
+        if (tokenizer.preType() == BpePreType.QWEN2) {
+            return concat(new int[] {eosId}, trailingNewlineAfterEndTurn(tokenizer));
         }
-        return new int[] {endTurnId};
+        return new int[] {eosId};
     }
 
-    /** Qwen ChatML trailing newline after {@code im_end} when the body already ends on EOG. */
+    /** Qwen ChatML trailing newline after {@code im_end} when KV body already ends on EOG. */
     public static int[] trailingNewlineAfterEndTurn(ChatTokenizer tokenizer) {
         if (tokenizer.preType() == BpePreType.QWEN2 || tokenizer.preType() == BpePreType.QWEN35) {
-            return qwenNewlineSuffix(tokenizer);
+            int[] encoded = tokenizer.encode("\n");
+            if (encoded.length > 0) {
+                return encoded;
+            }
+            try {
+                return new int[] {tokenizer.tokenIdForText("\n")};
+            } catch (IllegalArgumentException ex) {
+                return new int[0];
+            }
         }
         return new int[0];
-    }
-
-    private static int[] qwenNewlineSuffix(ChatTokenizer tokenizer) {
-        int[] encoded = tokenizer.encode("\n");
-        if (encoded.length > 0) {
-            return encoded;
-        }
-        try {
-            return new int[] {tokenizer.tokenIdForText("\n")};
-        } catch (IllegalArgumentException ex) {
-            return new int[0];
-        }
     }
 
     private static int[] concat(int[] a, int[] b) {

@@ -7,7 +7,8 @@
 # and <timestamp>-<model>-chat-audit.log (token audit) — updated after every turn.
 #
 # Usage:
-#   ./chat.sh
+#   ./chat.sh                        # greedy / 32 tokens — same defaults as tensor4j-gguf-it
+#   ./chat-enhanced.sh               # quality / 256 tokens / focus — open-ended, may ask questions
 #   ./chat.sh --download              # fetch default Qwen GGUF if missing
 #   ./chat.sh --llama                 # Llama 3.2 1B instead of Qwen
 #   ./chat.sh --gguf /path/to/model.gguf
@@ -91,10 +92,15 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-export TENSOR4J_CHAT_MODE="${TENSOR4J_CHAT_MODE:-quality}"
-export TENSOR4J_CHAT_MAX_TOKENS="${TENSOR4J_CHAT_MAX_TOKENS:-256}"
+export TENSOR4J_CHAT_MODE="${TENSOR4J_CHAT_MODE:-greedy}"
+export TENSOR4J_CHAT_MAX_TOKENS="${TENSOR4J_CHAT_MAX_TOKENS:-512}"
+export TENSOR4J_CHAT_MIN_TOKENS="${TENSOR4J_CHAT_MIN_TOKENS:-0}"
 export TENSOR4J_CHAT_SAVE_DIR="${TENSOR4J_CHAT_SAVE_DIR:-${HOME}/.local/conversations}"
 export TENSOR4J_CHAT_HISTORY_MODE="${TENSOR4J_CHAT_HISTORY_MODE:-llama}"
+export TENSOR4J_CHAT_DEFAULT_SYSTEM="${TENSOR4J_CHAT_DEFAULT_SYSTEM:-true}"
+export TENSOR4J_CHAT_SYSTEM_PROMPT="${TENSOR4J_CHAT_SYSTEM_PROMPT:-focus}"
+export TENSOR4J_CHAT_KV_CACHE="${TENSOR4J_CHAT_KV_CACHE:-false}"
+export TENSOR4J_CHAT_DEBUG="${TENSOR4J_CHAT_DEBUG:-false}"
 MODELS_DIR="${HOME}/.local/models"
 
 find_llama_gguf() {
